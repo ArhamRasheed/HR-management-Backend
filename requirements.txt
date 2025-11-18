@@ -1,0 +1,21 @@
+# Django HRMS Project Dependencies
+# Python 3.8+ required
+
+# Core Django Framework
+Django>=5.0,<6.0
+
+# MySQL Database Driver
+mysqlclient>=2.2.0
+
+# REST Framework
+djangorestframework>=3.14.0
+
+# JWT Authentication
+djangorestframework-simplejwt>=5.3.0
+
+# Environment Variables Management
+python-dotenv>=1.0.0
+
+# CORS Headers for Frontend Integration
+django-cors-headers>=4.3.0
+

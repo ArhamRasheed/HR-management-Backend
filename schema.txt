@@ -1,0 +1,140 @@
+1. Designations
+- designation_id (PK)
+- designation_name (unique)
+- description
+- created_at
+
+---
+
+2. Departments
+- department_id (PK)
+- department_name
+- manager_id (FK → employees)
+- manager_start_date
+- created_at
+
+---
+
+3. Employees
+- employee_id (PK)
+- department_id (FK → departments)
+- designation_id (FK → designations)
+- full_name
+- email (unique)
+- phone
+- password_hash (only for HR department employees)
+- joining_date
+- termination_date
+- employment_status (active/terminated/resigned/fired)
+
+---
+
+4. Leave Types
+- leave_type_id (PK)
+- leave_type_name
+- max_days_per_year
+- is_paid
+- policy_description
+
+---
+
+5. Leave Applications
+- leave_id (PK)
+- employee_id (FK → employees)
+- leave_type_id (FK → leave_types)
+- start_date
+- end_date
+- total_days
+- status (pending/approved/rejected)
+- applied_date
+
+---
+
+6. Insurance Plans
+- insurance_plan_id (PK)
+- plan_name
+- coverage_amount
+- premium_amount
+- policy_terms
+
+---
+
+7. Employee Insurance
+- employee_insurance_id (PK)
+- employee_id (FK → employees)
+- insurance_plan_id (FK → insurance_plans)
+- start_date
+- end_date
+- status (active/inactive)
+- monthly_deduction
+
+---
+
+8. Complaints
+- complaint_id (PK)
+- employee_id (FK → employees)
+- subject
+- description
+- status (open/resolved/closed)
+- filed_date
+- resolved_date
+
+---
+
+9. Payroll
+- payroll_id (PK)
+- employee_id (FK → employees)
+- month
+- year
+- basic_salary
+- bonuses
+- bonus_reason
+- deductions
+- deduction_reason
+- net_salary
+- status (pending/processed/paid)
+- payment_date
+- created_at
+
+---
+
+10. Attendance
+- attendance_id (PK)
+- employee_id (FK → employees)
+- attendance_date
+- check_in_time
+- check_out_time
+- status (present/absent/late/on_leave)
+
+---
+
+11. Monthly Employee Reports
+- report_id (PK)
+- employee_id (FK → employees)
+- month
+- year
+- report_file
+- generated_at
+
+---
+
+12. Monthly Company Reports
+- report_id (PK)
+- month
+- year
+- report_file
+- generated_at
+
+---
+
+13. Interviewed Candidates
+- candidate_id (PK)
+- full_name
+- email (unique)
+- phone
+- applied_position (FK → designations)
+- department_id (FK → departments)
+- interview_date
+- interviewer_id (FK → employees)
+- status (pending/shortlisted/rejected/hired)
+- remarks
