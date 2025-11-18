@@ -4,19 +4,37 @@ from rest_framework.response import Response
 from rest_framework import status
 import json
 from django.http import JsonResponse
-from .models import Employee, EmployeeInsurance, Payroll, Department, Designation, Attendance, LeaveApplication, LeaveType, InsurancePlan, InterviewedCandidate, Complaint
+from .models import Employee, EmployeeInsurance, Payroll, Department, Designation, Attendance, LeaveApplication, LeaveType, InsurancePlan, InterviewedCandidate, Complaint, MonthlyCompanyReport, MonthlyEmployeeReport
 from django.contrib.auth.hashers import check_password
 import secrets
 
 
-def add_employee(full_name, email): #add
-    Employee.objects.create(full_name=full_name, email=email, employment_status="active")
+def add_employee(full_name, email, phone, applied_position, department): #add
+    Employee.objects.create(full_name=full_name, email=email, phone=phone, applied_position=applied_position, department=department, employment_status="active")
 
 def delete_employee(employee_id): #delete
     Employee.objects.filter(id=employee_id).delete()
 
 def update_employee(employee_id, **kwargs): #update
     Employee.objects.filter(id=employee_id).update(**kwargs)
+
+def add_department(department_name): #add
+    Department.objects.create(department_name=department_name)
+
+def delete_department(department_name): #delete
+    Department.objects.filter(department_name=department_name).delete()
+
+def update_department(department_name, **kwargs): #update
+    Department.objects.filter(department_name=department_name).update(**kwargs)
+
+def add_designation(designation_name): #add
+    Designation.objects.create(designation_name=designation_name)
+
+def delete_designation(designation_name): #delete
+    Designation.objects.filter(designation_name=designation_name).delete()
+
+def update_designation(designation_name, **kwargs): #update
+    Designation.objects.filter(designation_name=designation_name).update(**kwargs)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -189,38 +207,313 @@ def dashboard_view(request):
     })
 
 def employee_list_view(request):
-    # Implementation of employee list view
-    pass    
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    employees = Employee.objects.all()
+    employee_data = [
+        {
+            'full_name': emp.full_name,
+            'email': emp.email,
+            'phone_number': emp.phone,
+            'department': emp.department.department_name if emp.department else None,
+            'designation': emp.designation.designation_name if emp.designation else None,
+            'employment_status': emp.employment_status,
+            'joining_date': emp.joining_date,
+            'termination_date': emp.termination_date if emp.termination_date else 'N/A'
+        }
+        for emp in employees
+    ]
+    return JsonResponse({'employees': employee_data})
+    
 def employee_detail_view(request, employee_id):
-    # Implementation of employee detail view
-    pass
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    employee = Employee.objects.filter(id=employee_id).first()
+    if not employee:
+        return JsonResponse({'message': 'Employee not found.'}, status=404)
+    return JsonResponse({
+        'full_name': employee.full_name,
+        'email': employee.email,
+        'phone_number': employee.phone,
+        'department': employee.department.department_name if employee.department else None,
+        'designation': employee.designation.designation_name if employee.designation else None,
+        'employment_status': employee.employment_status,
+        'joining_date': employee.joining_date,
+        'termination_date': employee.termination_date if employee.termination_date else 'N/A'
+    })
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def department_list_view(request):
-    # Implementation of department list view
-    pass
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    departments = Department.objects.all()
+    department_data = [
+        {
+            'department_name': dept.department_name,
+        }
+        for dept in departments
+    ]
+    return JsonResponse({'departments': department_data})   
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def designation_list_view(request):
-    # Implementation of designation list view
-    pass
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    designations = Designation.objects.all()
+    designation_data = [
+        {
+            'designation_name': desig.designation_name,
+        }
+        for desig in designations
+    ]
+    return JsonResponse({'designations': designation_data})
+
+@api_view(['GET'])
+@permission_classes([AllowAny]) 
 def shortlisted_candidate_list_view(request):
-    # Implementation of shortlisted candidate list view
-    pass
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    candidates = InterviewedCandidate.objects.filter(status='shortlisted')
+    candidate_data = [
+        {
+            'id': candidate.id,
+            'full_name': candidate.full_name,
+            'email': candidate.email,
+            'phone_number': candidate.phone,
+            'position_applied': candidate.applied_position.designation_name if candidate.applied_position else None,
+            'interview_date': candidate.interview_date,
+            'status': candidate.status,
+            'remarks': candidate.remarks,
+            'department': candidate.department.department_name if candidate.department else None,
+            'interviewer': candidate.interviewer.full_name if candidate.interviewer else None
+        }
+        for candidate in candidates
+    ]
+    return JsonResponse({'shortlisted_candidates': candidate_data})
+
+@api_view(['GET'])
+@permission_classes([AllowAny])    
+def candidate_list_view(request):
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    candidates = InterviewedCandidate.objects.all()
+    candidate_data = [
+        {
+            'id': candidate.id,
+            'full_name': candidate.full_name,
+            'email': candidate.email,
+            'phone_number': candidate.phone,
+            'position_applied': candidate.applied_position.designation_name if candidate.applied_position else None,
+            'interview_date': candidate.interview_date,
+            'status': candidate.status,
+            'remarks': candidate.remarks,
+            'department': candidate.department.department_name if candidate.department else None,
+            'interviewer': candidate.interviewer.full_name if candidate.interviewer else None
+        }
+        for candidate in candidates
+    ]
+    return JsonResponse({'all_candidates': candidate_data})
+
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def hire_employee_view(request):
-    pass
+    data = json.loads(request.body)
+    candidate_id = data.get('candidate_id')
+    if not candidate_id:
+        return JsonResponse({'message': 'No candidate ID provided.'}, status=400)
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    candidate = InterviewedCandidate.objects.filter(id=candidate_id, status='shortlisted').first()
+    if not candidate:
+        return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
+    add_employee(candidate.full_name, candidate.email, candidate.phone, candidate.applied_position, candidate.department)
+    return JsonResponse({'message': 'Employee hired successfully.'})
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def reports_view(request):
-    # Implementation of reports view
-    pass
-def department_view(request, department_name):
-    # Implementation of department view
-    pass
+    data = json.loads(request.body)
+    doc_type = data.get('doc_type')
+    if 'company_report' in doc_type and 'employee_report' in doc_type:
+        c_reports = MonthlyCompanyReport.objects.all()
+        e_reports = MonthlyEmployeeReport.objects.all()
+        return JsonResponse({
+            'company_reports': list(c_reports.values()),
+            'employee_reports': list(e_reports.values())
+        })
+    elif 'company_report' in doc_type:
+        c_reports = MonthlyCompanyReport.objects.all()
+        return JsonResponse({
+            'company_reports': list(c_reports.values())
+        })
+    elif 'employee_report' in doc_type:
+        e_reports = MonthlyEmployeeReport.objects.all()
+        return JsonResponse({
+            'employee_reports': list(e_reports.values())
+        })
+    else:
+        return JsonResponse({
+            'message': 'Invalid document type requested.'
+        }, status=400)
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def department_view(request):
+    data = json.loads(request.body)
+    department_name = data.get('department_name')
+    if not department_name:
+        return JsonResponse({'message': 'No department name provided.'}, status=400)
+    departemnt = Department.objects.filter(department_name=department_name).first()
+    if not departemnt:
+        return JsonResponse({'message': 'Department not found.'}, status=404)
+    employees = [
+            {
+                'full_name': emp.full_name,
+                'email': emp.email,
+                'phone_number': emp.phone,
+                'designation': emp.designation.designation_name if emp.designation else None,
+                'employment_status': emp.employment_status,
+                'joining_date': emp.joining_date,
+                'termination_date': emp.termination_date if emp.termination_date else 'N/A'
+            }
+            for emp in Employee.objects.filter(department=departemnt)   
+        ]
+    return JsonResponse({
+        'department_name': departemnt.department_name,
+        'total_employees': Employee.objects.filter(department=departemnt).count(),
+        'employees': employees
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def old_employee_records_view(request):
-    # Implementation of old employee records view
-    pass
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'Employee not found in session'}, status=404)
+    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
+    old_employees = Employee.objects.filter(termination_date__isnull=False)
+    old_employees_data = [
+        {
+            'full_name': emp.full_name,
+            'email': emp.email,
+            'phone_number': emp.phone,
+            'department': emp.department.department_name if emp.department else None,
+            'designation': emp.designation.designation_name if emp.designation else None,
+            'joining_date': emp.joining_date,
+            'termination_date': emp.termination_date
+        }
+        for emp in old_employees
+    ]
+    return JsonResponse({'old_employees': old_employees_data})
+
+    
 def generate_payroll_view(request, employee_id):
     # Implementation of generate payroll view
     pass
 def payroll_history_view(request):
     # Implementation of payroll history view
     pass
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def add_department_view(request):
-    # Implementation of add department view
-    pass
+    data = json.loads(request.body)
+    department_name = data.get('department_name')
+    if not department_name:
+        return JsonResponse({'message': 'No department name provided.'}, status=400)
+    deps = Department.objects.filter(department_name=department_name)
+    if deps.exists():
+        return JsonResponse({'message': 'Department already exists.'}, status=400)
+    add_department(department_name)
+    return JsonResponse({'message': 'Department added successfully.'})
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def add_designation_view(request):
+    data = json.loads(request.body)
+    designation_name = data.get('designation_name')
+    if not designation_name:
+        return JsonResponse({'message': 'No designation name provided.'}, status=400)
+    desigs = Designation.objects.filter(designation_name=designation_name)
+    if desigs.exists():
+        return JsonResponse({'message': 'Designation already exists.'}, status=400)
+    add_designation(designation_name)
+    return JsonResponse({'message': 'Designation added successfully.'})
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_department_view(request):
+    data = json.loads(request.body)
+    department_name = data.get('department_name')
+    if not department_name:
+        return JsonResponse({'message': 'No department name provided.'}, status=400)
+    deps = Department.objects.filter(department_name=department_name)
+    if not deps.exists():
+        return JsonResponse({'message': 'Department not found.'}, status=404)
+    delete_department(department_name)
+    return JsonResponse({'message': 'Department deleted successfully.'})
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_designation_view(request):
+    data = json.loads(request.body)
+    designation_name = data.get('designation_name')
+    if not designation_name:    
+        return JsonResponse({'message': 'No designation name provided.'}, status=400)
+    desigs = Designation.objects.filter(designation_name=designation_name)
+    if not desigs.exists():
+        return JsonResponse({'message': 'Designation not found.'}, status=404)
+    delete_designation(designation_name)
+    return JsonResponse({'message': 'Designation deleted successfully.'})
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_department_view(request):
+    data = json.loads(request.body)
+    department_name = data.get('department_name')
+    if not department_name:
+        return JsonResponse({'message': 'No data provided for update.'}, status=400)
+    dep = Department.objects.filter(department_name=department_name)
+    if not dep.exists():
+        return JsonResponse({'message': 'Department not found.'}, status=404)
+    update_department(department_name, department_name)
+    return JsonResponse({'message': 'Department updated successfully.'})
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_designation_view(request, designation_name):
+    data = json.loads(request.body)
+    designation_name = data.get('designation_name')
+    if not designation_name:
+        return JsonResponse({'message': 'No data provided for update.'}, status=400)
+    desig = Designation.objects.filter(designation_name=designation_name)
+    if not desig.exists():
+        return JsonResponse({'message': 'Designation not found.'}, status=404)
+    update_designation(designation_name, designation_name)
+    return JsonResponse({'message': 'Designation updated successfully.'})
