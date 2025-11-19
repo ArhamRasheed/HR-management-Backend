@@ -25,7 +25,7 @@ def hr_required(view_func):
                 'message': 'Employee not found in session'
             }, status=404)
         
-        if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
+        if not request.session['department'] == 'HR':
             return JsonResponse({
                 'message': 'Access denied. Only HR Employees can view employee list.'
             }, status=403)

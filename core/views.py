@@ -147,6 +147,10 @@ def dashboard_view(request):
     if not employee_id:
         return JsonResponse({'message': 'Employee not found in session'}, status=404)
     employee = Employee.objects.filter(id=employee_id).first()
+    if not employee:
+        return JsonResponse({
+            'message': 'Employee not found.'
+        }, status=404)
     insurances = EmployeeInsurance.objects.filter(employee=employee)
     leaves = LeaveApplication.objects.filter(employee=employee)
     attendances = Attendance.objects.filter(employee=employee)
@@ -192,10 +196,6 @@ def dashboard_view(request):
         }
         for complaint in complaints
     ]
-    if not employee:
-        return JsonResponse({
-            'message': 'Employee not found.'
-        }, status=404)
     return JsonResponse({
         'full_name': employee.full_name,    
         'department': employee.department.department_name if employee.department else None,
@@ -229,7 +229,11 @@ def employee_list_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @hr_required
-def employee_detail_view(request, employee_id):
+def employee_detail_view(request):
+    data = json.loads(request.body)
+    employee_id = data.get('employee_id')
+    if not employee_id:
+        return JsonResponse({'message': 'No employee ID provided.'}, status=400)
     employee = Employee.objects.filter(id=employee_id).first()
     if not employee:
         return JsonResponse({'message': 'Employee not found.'}, status=404)
@@ -251,6 +255,7 @@ def department_list_view(request):
     departments = Department.objects.all()
     department_data = [
         {
+            'id': dept.id,
             'department_name': dept.department_name,
         }
         for dept in departments
@@ -264,6 +269,7 @@ def designation_list_view(request):
     designations = Designation.objects.all()
     designation_data = [
         {
+            'id': desig.id,
             'designation_name': desig.designation_name,
         }
         for desig in designations
