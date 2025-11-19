@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from .models import Employee, EmployeeInsurance, Payroll, Department, Designation, Attendance, LeaveApplication, LeaveType, InsurancePlan, InterviewedCandidate, Complaint, MonthlyCompanyReport, MonthlyEmployeeReport
 from django.contrib.auth.hashers import check_password
 import secrets
+from .decorators import hr_required
 
 
 def add_employee(full_name, email, phone, applied_position, department): #add
@@ -206,15 +207,12 @@ def dashboard_view(request):
         'complaints': complaints_data
     })
 
+@hr_required
 def employee_list_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     employees = Employee.objects.all()
     employee_data = [
         {
+            'id': emp.id,
             'full_name': emp.full_name,
             'email': emp.email,
             'phone_number': emp.phone,
@@ -228,12 +226,10 @@ def employee_list_view(request):
     ]
     return JsonResponse({'employees': employee_data})
     
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@hr_required
 def employee_detail_view(request, employee_id):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     employee = Employee.objects.filter(id=employee_id).first()
     if not employee:
         return JsonResponse({'message': 'Employee not found.'}, status=404)
@@ -250,12 +246,8 @@ def employee_detail_view(request, employee_id):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@hr_required
 def department_list_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     departments = Department.objects.all()
     department_data = [
         {
@@ -267,12 +259,8 @@ def department_list_view(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@hr_required
 def designation_list_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     designations = Designation.objects.all()
     designation_data = [
         {
@@ -283,13 +271,9 @@ def designation_list_view(request):
     return JsonResponse({'designations': designation_data})
 
 @api_view(['GET'])
-@permission_classes([AllowAny]) 
+@permission_classes([AllowAny])
+@hr_required
 def shortlisted_candidate_list_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     candidates = InterviewedCandidate.objects.filter(status='shortlisted')
     candidate_data = [
         {
@@ -309,13 +293,9 @@ def shortlisted_candidate_list_view(request):
     return JsonResponse({'shortlisted_candidates': candidate_data})
 
 @api_view(['GET'])
-@permission_classes([AllowAny])    
+@permission_classes([AllowAny])
+@hr_required
 def candidate_list_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     candidates = InterviewedCandidate.objects.all()
     candidate_data = [
         {
@@ -336,16 +316,12 @@ def candidate_list_view(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@hr_required
 def hire_employee_view(request):
     data = json.loads(request.body)
     candidate_id = data.get('candidate_id')
     if not candidate_id:
         return JsonResponse({'message': 'No candidate ID provided.'}, status=400)
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     candidate = InterviewedCandidate.objects.filter(id=candidate_id, status='shortlisted').first()
     if not candidate:
         return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
@@ -410,12 +386,8 @@ def department_view(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@hr_required
 def old_employee_records_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    if not Employee.objects.filter(id=employee_id, department__department_name='HR').exists():
-        return JsonResponse({'message': 'Access denied. Only HR Employees can view employee list.'}, status=403)
     old_employees = Employee.objects.filter(termination_date__isnull=False)
     old_employees_data = [
         {
