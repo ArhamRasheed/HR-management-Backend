@@ -14,34 +14,149 @@ from django.conf import settings
 from .decorators import hr_required
 from django.utils import timezone
 from decimal import Decimal
+from django.contrib.auth.hashers import make_password
 
+allowed_positions_for_departments = {
+    'IT': ['Software Engineer', 'CTO', 'System Administrator', 'CEO', 'Manager'],
+    'HR': ['Manager', 'Recruiter', 'CEO'],
+    'Finance': ['Accountant', 'Financial Analyst', 'CEO'],
+    'Sales': ['Sales Executive', 'Manager', 'CEO'],
+    'Marketing': ['Marketing Executive', 'Manager', 'CEO'],
+}
 
-def add_employee(full_name, email, phone, applied_position, department): #add
-    Employee.objects.create(full_name=full_name, email=email, phone=phone, applied_position=applied_position, department=department, employment_status="active")
+def add_employee(full_name, email, phone, applied_position, department, password):
+    if department.department_name == 'HR' and not password:
+        return False
+    if applied_position.designation_name == 'CEO':
+        ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
+        if ceos.exists():
+            return False
+    if applied_position.designation_name == 'CTO' and (not department == 'IT' or Employee.objects.filter(designation__designation_name='CTO').exists()):
+        return False
+    if applied_position not in allowed_positions_for_departments.get(department.department_name, []):
+        return False
+    Employee.objects.create(
+        full_name=full_name, 
+        email=email, 
+        phone=phone, 
+        password=make_password(password),
+        department=department, 
+        employment_status="active",
+        designation=applied_position)
+    return True
 
-def delete_employee(employee_id): #delete
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+@hr_required
+def delete_employee(employee_id):
     Employee.objects.filter(id=employee_id).delete()
+    return JsonResponse({'message': 'Employee deleted successfully.'})
 
-def update_employee(employee_id, **kwargs): #update
-    Employee.objects.filter(id=employee_id).update(**kwargs)
 
-def add_department(department_name): #add
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+@hr_required
+def update_employee(request, employee_id): #update
+    data = json.loads(request.body)
+    to_update = data.get('to_update')
+    new_val = data.get('new_val')
+    if not to_update or not new_val:
+        return JsonResponse({'message': 'No data provided for update.'}, status=400)
+    if to_update == 'full_name':
+        Employee.objects.filter(id=employee_id).update(full_name=new_val)
+        return JsonResponse({'message': 'Employee name updated successfully.'})
+    elif to_update == 'email':
+        Employee.objects.filter(id=employee_id).update(email=new_val)
+        return JsonResponse({'message': 'Employee email updated successfully.'})
+    elif to_update == 'phone':
+        Employee.objects.filter(id=employee_id).update(phone=new_val)
+        return JsonResponse({'message': 'Employee phone updated successfully.'})
+    elif to_update == 'department_name':
+        if new_val not in Department.objects.values_list('department_name', flat=True):
+            return JsonResponse({'message': 'Department does not exist.'}, status=400)
+        Employee.objects.filter(id=employee_id).update(department_id=Department.objects.get(department_name=new_val).id)
+        return JsonResponse({'message': 'Employee department updated successfully.'})
+    elif to_update == 'designation_name':
+        if new_val == 'CEO':
+            ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
+            if ceos.exists():
+                return JsonResponse({'message': 'CEO already exists.'}, status=400)
+        elif new_val == 'CTO' and not Employee.objects.filter(employee_id=employee_id).department.department_name == 'IT':
+            return JsonResponse({'message': 'Only IT department can have CTO designation.'}, status=400)
+        elif new_val == 'CTO' and Employee.objects.filter(designation__designation_name='CTO').exists():
+            return JsonResponse({'message': 'CTO already exists.'}, status=400)
+        if new_val not in Designation.objects.values_list('designation_name', flat=True):
+            return JsonResponse({'message': 'Designation does not exist.'}, status=400)
+        Employee.objects.filter(id=employee_id).update(designation_id=Designation.objects.get(designation_name=new_val).id)
+        return JsonResponse({'message': 'Employee designation updated successfully.'})
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+@hr_required
+def add_department(request):
+    data = json.loads(request.body)
+    department_name = data.get('department_name')
+    if not department_name:
+        return JsonResponse({'message': 'No department name provided.'}, status=400)
+    if Department.objects.filter(department_name=department_name).exists():
+        return JsonResponse({'message': 'Department already exists.'}, status=400)
     Department.objects.create(department_name=department_name)
+    return JsonResponse({'message': 'Department added successfully.'})
 
-def delete_department(department_name): #delete
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+@hr_required
+def delete_department(request, department_name):
     Department.objects.filter(department_name=department_name).delete()
+    return JsonResponse({'message': 'Department deleted successfully.'})
 
-def update_department(department_name, **kwargs): #update
-    Department.objects.filter(department_name=department_name).update(**kwargs)
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+@hr_required
+def update_department(request, department_name): #update
+    data = json.loads(request.body)
+    to_update = data.get('to_update')
+    new_val = data.get('new_val')
+    if to_update == 'department_name':
+        if Department.objects.filter(department_name=new_val).exists():
+            return JsonResponse({'message': 'Department already exists.'}, status=400)
+        Department.objects.filter(department_name=department_name).update(department_name=new_val)
+        return JsonResponse ({'message': 'Department name updated successfully.'})
 
-def add_designation(designation_name): #add
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@hr_required
+def add_designation(request):
+    data = json.loads(request.body)
+    designation_name = data.get('designation_name')
+    if not designation_name:
+        return JsonResponse({'message': 'No designation name provided.'}, status=400)
+    if Designation.objects.filter(designation_name=designation_name).exists():
+        return JsonResponse({'message': 'Designation already exists.'}, status=400)
     Designation.objects.create(designation_name=designation_name)
+    return JsonResponse({'message': 'Designation added successfully.'})
 
-def delete_designation(designation_name): #delete
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+@hr_required
+def delete_designation(request,designation_name):
     Designation.objects.filter(designation_name=designation_name).delete()
+    return JsonResponse({'message': 'Designation deleted successfully.'})
 
-def update_designation(designation_name, **kwargs): #update
-    Designation.objects.filter(designation_name=designation_name).update(**kwargs)
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+@hr_required
+def update_designation(request, designation_name): #update
+    data = json.loads(request.body)
+    to_update = data.get('to_update')
+    new_val = data.get('new_val')
+    if to_update == 'designation_name':
+        if Designation.objects.filter(designation_name=new_val).exists():
+            return JsonResponse({'message': 'Designation already exists.'}, status=400)
+        Designation.objects.filter(designation_name=designation_name).update(designation_name=new_val)
+        return JsonResponse ({'message': 'Designation name updated successfully.'})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -337,13 +452,16 @@ def candidate_list_view(request):
 def hire_employee_view(request):
     data = json.loads(request.body)
     candidate_id = data.get('candidate_id')
+    password  = data.get('password')
     if not candidate_id:
         return JsonResponse({'message': 'No candidate ID provided.'}, status=400)
     candidate = InterviewedCandidate.objects.filter(id=candidate_id, status='shortlisted').first()
     if not candidate:
         return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
-    add_employee(candidate.full_name, candidate.email, candidate.phone, candidate.applied_position, candidate.department)
-    return JsonResponse({'message': 'Employee hired successfully.'})
+    if(add_employee(candidate.full_name, candidate.email, candidate.phone, candidate.applied_position, candidate.department, password)):
+        return JsonResponse({'message': 'Employee hired successfully.'})
+    else:
+        return JsonResponse({'message': 'Something went wrong.'}, status=404)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -574,6 +692,7 @@ def delete_department_view(request):
 
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
+@hr_required
 def delete_designation_view(request):
     data = json.loads(request.body)
     designation_name = data.get('designation_name')
@@ -587,6 +706,7 @@ def delete_designation_view(request):
 
 @api_view(['PUT'])
 @permission_classes([AllowAny])
+@hr_required
 def update_department_view(request):
     data = json.loads(request.body)
     department_name = data.get('department_name')
@@ -600,6 +720,7 @@ def update_department_view(request):
 
 @api_view(['PUT'])
 @permission_classes([AllowAny])
+@hr_required
 def update_designation_view(request, designation_name):
     data = json.loads(request.body)
     designation_name = data.get('designation_name')
@@ -616,6 +737,9 @@ def update_designation_view(request, designation_name):
 
 
 @csrf_exempt
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def generate_report_view(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=400)
@@ -634,6 +758,10 @@ def generate_report_view(request):
 
     return JsonResponse({"error": "Invalid report_type"}, status=400)
 
+@csrf_exempt
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def generate_employee_reports(month, year):
 
     employees = Employee.objects.all()
@@ -737,7 +865,10 @@ Complaints:
 
     return JsonResponse({"status": "success", "employee_reports": results})
 
-
+@csrf_exempt
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def generate_company_report(month, year):
 
     exists = MonthlyCompanyReport.objects.filter(
@@ -827,3 +958,270 @@ Complaints:
         "status": "created",
         "file_path": db_path
     })
+
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def leave_list_view(request):
+    leaves = LeaveType.objects.all()
+    leave_data = [
+        {
+            'id': leave.id,
+            'leave_type_name': leave.leave_type_name,
+            'description': leave.description,
+            'max_days_allowed': leave.max_days_allowed,
+        }
+        for leave in leaves
+    ]
+    return JsonResponse({'leave_types': leave_data})
+
+
+@hr_required
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def add_leave_view(request):
+    data = json.loads(request.body)
+    leave_type_name = data.get('leave_type_name')
+    description = data.get('description')
+    max_days_per_year = data.get('max_days_allowed')
+    if not leave_type_name:
+        return JsonResponse({'message': 'No leave type name provided.'}, status=400)
+    leaves = LeaveType.objects.filter(leave_type_name=leave_type_name)
+    if leaves.exists():
+        return JsonResponse({'message': 'Leave type already exists.'}, status=400)
+    LeaveType.objects.create(
+        leave_type_name=leave_type_name,
+        description=description,
+        max_days_per_year=max_days_per_year
+    )
+    return JsonResponse({'message': 'Leave type added successfully.'})
+
+@hr_required
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_leave_status(request, leave_type_name):
+    data = json.loads(request.body)
+    to_update = data.get('to_update')
+    new_val = data.get('new_val')
+    if not to_update or not new_val:
+        return JsonResponse({'message': 'All Parameters are not provided'}, status=400)
+    if to_update == 'leave_type_name':
+        if LeaveType.objects.filter(leave_type_name=new_val).exists():
+            return JsonResponse({'message': 'Leave type already exists.'}, status=400)
+        LeaveType.objects.filter(leave_type_name=leave_type_name).update(leave_type_name=new_val)
+        return JsonResponse ({'message': 'Leave type name updated successfully.'})
+    elif to_update == 'description':
+        LeaveType.objects.filter(leave_type_name=leave_type_name).update(description=new_val)
+        return JsonResponse ({'message': 'Leave type description updated successfully.'})
+    elif to_update == 'max_days_allowed':
+        LeaveType.objects.filter(leave_type_name=leave_type_name).update(max_days_allowed=new_val)
+        return JsonResponse ({'message': 'Leave type max days allowed updated successfully.'})
+    return JsonResponse ({'message': "updating a non-existing field"}, status=400)
+
+@hr_required
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_leave(request, leave_type_name):
+    LeaveType.objects.filter(leave_type_name=leave_type_name).delete()
+    return JsonResponse ({'message': "Deleted Successfully"}, status=200)
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def insured_employees_view(request):
+    insurances = InsurancePlan.objects.all().prefetch_related(
+        'employee_insurances__employee'
+    )
+
+    result = []
+
+    for insurance in insurances:
+        employees_list = [
+            {
+                "employee_id": ei.employee.id,
+                "employee_name": ei.employee.full_name,
+                "status": ei.status,
+                "start_date": ei.start_date,
+                "end_date": ei.end_date,
+                "monthly_deduction": ei.monthly_deduction,
+            }
+            for ei in insurance.employee_insurances.all()
+        ]
+
+        result.append({
+            "insurance_name": insurance.plan_name,
+            "employees": employees_list
+        })
+    return JsonResponse({"insurances": result}, safe=False)
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def view_attendance_view(request):
+    # Performance optimized: one JOIN, no N+1
+    attendances = Attendance.objects.select_related('employee').all()
+
+    result = [
+        {
+            "employee_id": att.employee.id,
+            "employee_name": att.employee.full_name,
+            "date": att.attendance_date,
+            "check_in_time": att.check_in_time,
+            "check_out_time": att.check_out_time,
+            "status": att.status,
+        }
+        for att in attendances
+    ]
+
+    return JsonResponse({"attendances": result}, safe=False)
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def insurance_view(request):
+    insurances = InsurancePlan.objects.all()
+    data = [
+        {
+            'id': insurance.id,
+            'plan_name': insurance.plan_name,
+            'coverage': insurance.coverage,  # include any other fields you want
+            'premium': str(insurance.premium)  # convert Decimal to string for JSON
+        }
+        for insurance in insurances
+    ]
+    return JsonResponse({'insurances': data})
+
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@csrf_exempt
+def add_insurance_view(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            plan_name = data.get("plan_name")
+            coverage = data.get("coverage")
+            premium = data.get("premium")
+            policy_term = data.get("policy_term")  # new field
+
+            if not plan_name or not coverage or premium is None or policy_term is None:
+                return JsonResponse({"error": "Missing required fields"}, status=400)
+
+            insurance = InsurancePlan.objects.create(
+                plan_name=plan_name,
+                coverage=coverage,
+                premium=premium,
+                policy_term=policy_term
+            )
+
+            return JsonResponse({
+                "message": "Insurance added successfully",
+                "insurance": {
+                    "id": insurance.id,
+                    "plan_name": insurance.plan_name,
+                    "coverage": insurance.coverage,
+                    "premium": str(insurance.premium),
+                    "policy_term": insurance.policy_term
+                }
+            }, status=201)
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+@hr_required
+@api_view(['DELETE'])
+@permission_classes([AllowAny])
+def delete_insurance(request, insurance_id):
+    try:
+        insurance = InsurancePlan.objects.get(id=insurance_id)
+        insurance.delete()
+        return JsonResponse({"message": "Insurance deleted successfully"})
+    except InsurancePlan.DoesNotExist:
+            return JsonResponse({"error": "Insurance not found"}, status=404)
+@hr_required
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def update_insurance(request, insurance_id):
+    try:
+        insurance = InsurancePlan.objects.get(id=insurance_id)
+    except InsurancePlan.DoesNotExist:
+        return JsonResponse({'message': 'Insurance plan not found.'}, status=404)
+
+    data = json.loads(request.body)
+    to_update = data.get('to_update')
+    new_val = data.get('new_val')
+
+    if not to_update or new_val is None:
+        return JsonResponse({'message': 'No data provided for update.'}, status=400)
+
+    if to_update == 'plan_name':
+        if InsurancePlan.objects.filter(plan_name=new_val).exclude(id=insurance_id).exists():
+            return JsonResponse({'message': 'Insurance plan name already exists.'}, status=400)
+        insurance.plan_name = new_val
+        insurance.save()
+        return JsonResponse({'message': 'Insurance plan name updated successfully.'})
+
+    elif to_update == 'coverage_amount':
+        try:
+            insurance.coverage_amount = Decimal(new_val)
+            insurance.save()
+            return JsonResponse({'message': 'Insurance coverage amount updated successfully.'})
+        except (ValueError, TypeError):
+            return JsonResponse({'message': 'Invalid coverage amount.'}, status=400)
+
+    elif to_update == 'premium_amount':
+        try:
+            insurance.premium_amount = Decimal(new_val)
+            insurance.save()
+            return JsonResponse({'message': 'Insurance premium amount updated successfully.'})
+        except (ValueError, TypeError):
+            return JsonResponse({'message': 'Invalid premium amount.'}, status=400)
+
+    elif to_update == 'policy_terms':
+        insurance.policy_terms = new_val
+        insurance.save()
+        return JsonResponse({'message': 'Insurance policy terms updated successfully.'})
+
+    else:
+        return JsonResponse({'message': 'Invalid field to update.'}, status=400)
+
+
+@hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def employee_leave(request):
+    leave_applications = LeaveApplication.objects.select_related('employee', 'leave_type').all()
+
+    result = [
+        {
+            'id': la.id,
+            'employee': {
+                'id': la.employee.id,
+                'full_name': la.employee.full_name,
+                'email': la.employee.email,
+                'department': la.employee.department.department_name if la.employee.department else None,
+                'designation': la.employee.designation.designation_name if la.employee.designation else None,
+            },
+            'leave_type': {
+                'id': la.leave_type.id,
+                'leave_type_name': la.leave_type.leave_type_name,
+                'description': la.leave_type.description,
+                'max_days_allowed': la.leave_type.max_days_allowed,
+            },
+            'start_date': la.start_date,
+            'end_date': la.end_date,
+            'total_days': la.total_days,
+            'status': la.status,
+            'applied_date': la.applied_date,
+        }
+        for la in leave_applications
+    ]
+
+    return JsonResponse({'leave_applications': result}, safe=False)
+
+
+    
