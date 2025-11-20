@@ -214,6 +214,8 @@ def dashboard_view(request):
     })
 
 @hr_required
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def employee_list_view(request):
     employees = Employee.objects.all()
     employee_data = [
@@ -254,6 +256,7 @@ def employee_detail_view(request):
         'termination_date': employee.termination_date if employee.termination_date else 'N/A'
     })
 
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @hr_required
@@ -267,6 +270,8 @@ def department_list_view(request):
         for dept in departments
     ]
     return JsonResponse({'departments': department_data})   
+
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
