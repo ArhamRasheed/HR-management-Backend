@@ -6,8 +6,14 @@ import json
 from django.http import JsonResponse
 from .models import Employee, EmployeeInsurance, Payroll, Department, Designation, Attendance, LeaveApplication, LeaveType, InsurancePlan, InterviewedCandidate, Complaint, MonthlyCompanyReport, MonthlyEmployeeReport
 from django.contrib.auth.hashers import check_password
+from datetime import date, timedelta, datetime
 import secrets
+from django.views.decorators.csrf import csrf_exempt
+import os
+from django.conf import settings
 from .decorators import hr_required
+from django.utils import timezone
+from decimal import Decimal
 
 
 def add_employee(full_name, email, phone, applied_position, department): #add
@@ -339,20 +345,32 @@ def hire_employee_view(request):
 def reports_view(request):
     data = json.loads(request.body)
     doc_type = data.get('doc_type')
+    month = data.get('month')
+    year = data.get('year')
     if 'company_report' in doc_type and 'employee_report' in doc_type:
-        c_reports = MonthlyCompanyReport.objects.all()
-        e_reports = MonthlyEmployeeReport.objects.all()
+        if month and year:
+            c_reports = MonthlyCompanyReport.objects.filter(month=month, year=year)
+            e_reports = MonthlyEmployeeReport.objects.filter(month=month, year=year)
+        else:
+            c_reports = MonthlyCompanyReport.objects.all()
+            e_reports = MonthlyEmployeeReport.objects.all()
         return JsonResponse({
             'company_reports': list(c_reports.values()),
             'employee_reports': list(e_reports.values())
         })
     elif 'company_report' in doc_type:
-        c_reports = MonthlyCompanyReport.objects.all()
+        if month and year:
+            c_reports = MonthlyCompanyReport.objects.filter(month=month, year=year)
+        else:
+            c_reports = MonthlyCompanyReport.objects.all()
         return JsonResponse({
             'company_reports': list(c_reports.values())
         })
     elif 'employee_report' in doc_type:
-        e_reports = MonthlyEmployeeReport.objects.all()
+        if month and year:
+            e_reports = MonthlyEmployeeReport.objects.filter(month=month, year=year)
+        else:
+            e_reports = MonthlyEmployeeReport.objects.all()
         return JsonResponse({
             'employee_reports': list(e_reports.values())
         })
@@ -411,8 +429,100 @@ def old_employee_records_view(request):
 
     
 def generate_payroll_view(request, employee_id):
-    # Implementation of generate payroll view
-    pass
+    month = int(request.GET.get('month', timezone.now().month))
+    year = int(request.GET.get('year', timezone.now().year))
+    
+    employees = Employee.objects.all()
+    payrolls_data = []
+
+    for employee in employees:
+        if employee.employment_status != 'active':
+            continue
+        total_deductions = Decimal('0.00')
+
+        
+        absences = Attendance.objects.filter(
+            employee=employee,
+            attendance_date__moth=month,
+            attendance_date__year=year,
+            status='absent'
+        )
+        for absence in absences:
+            total_deductions += employee.basic_salary / 30
+
+        
+        leaves = LeaveApplication.objects.filter(
+            employee=employee,
+            start_date__month=month,
+            start_date__year=year,
+            approved=True,
+            paid=False
+        )
+        for leave in leaves:
+            total_deductions += employee.basic_salary / 30 * leave.days_count()
+
+        
+        insurances = EmployeeInsurance.objects.filter(
+            employee=employee,
+            end_date__gte=date(year, month, 1),
+            paid=False
+        )
+        for insurance in insurances:
+            total_deductions += insurance.monthly_deduction
+
+        
+        today = date.today()
+        tenure_years = max(0, today.year - employee.join_date.year - ((today.month, today.day) < (employee.join_date.month, employee.join_date.day)))
+        bonus_percentage = min(tenure_years, 10)  # optional cap
+        bonus = (employee.basic_salary * Decimal(bonus_percentage) / Decimal(100))
+        attendances = Attendance.objects.filter(
+            employee=employee,
+            attendance_date__month=month,
+            attendance_date__year=year,
+            status='present'
+        )
+
+        for attendance in attendances:
+            if attendance.check_in_time and attendance.check_out_time:
+                work_duration = datetime.combine(today, attendance.check_out_time) - datetime.combine(today, attendance.check_in_time)
+                if work_duration > timedelta(hours=8):
+                        bonus += employee.basic_salary * Decimal('0.5') / Decimal(100)
+                    
+        payroll, created = Payroll.objects.get_or_create(
+            employee=employee,
+            month=month,
+            year=year,
+            defaults={
+                'basic_salary': employee.basic_salary,
+                'bonuses': bonus,
+                'bonus_reason': f'{bonus_percentage}% tenure bonus and overtime',
+                'deductions': total_deductions,
+                'deduction_reason': 'Absences/Leaves/Insurance',
+                'net_salary': employee.basic_salary + bonus - total_deductions,
+                'status': 'pending'  
+            }
+        )
+
+        if created:
+            payroll.net_salary = payroll.basic_salary + payroll.bonuses - payroll.deductions
+            payroll.save()
+
+        payrolls_data.append({
+            'employee_id': employee.id,
+            'employee_name': employee.full_name,
+            'month': month,
+            'year': year,
+            'basic_salary': str(payroll.basic_salary),
+            'bonuses': str(payroll.bonuses),
+            'bonus_reason': payroll.bonus_reason,
+            'deductions': str(payroll.deductions),
+            'deduction_reason': payroll.deduction_reason,
+            'net_salary': str(payroll.net_salary),
+            'status': payroll.status
+        })
+
+    return JsonResponse({'status': 'success', 'payrolls': payrolls_data})
+    
 def payroll_history_view(request):
     # Implementation of payroll history view
     pass
@@ -495,3 +605,220 @@ def update_designation_view(request, designation_name):
         return JsonResponse({'message': 'Designation not found.'}, status=404)
     update_designation(designation_name, designation_name)
     return JsonResponse({'message': 'Designation updated successfully.'})
+
+
+
+
+
+@csrf_exempt
+def generate_report_view(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=400)
+
+    data = json.loads(request.body)
+
+    report_type = data.get("report_type")   # "employee" or "company"
+    month = int(data.get("month"))
+    year = int(data.get("year"))
+
+    if report_type == "employee":
+        return generate_employee_reports(month, year)
+
+    elif report_type == "company":
+        return generate_company_report(month, year)
+
+    return JsonResponse({"error": "Invalid report_type"}, status=400)
+
+def generate_employee_reports(month, year):
+
+    employees = Employee.objects.all()
+    results = []
+
+    base_folder = os.path.join(settings.MEDIA_ROOT, "employee_reports")
+    os.makedirs(base_folder, exist_ok=True)
+
+    for emp in employees:
+
+        # 1 — check if report already exists
+        exists = MonthlyEmployeeReport.objects.filter(
+            employee=emp,
+            month=month,
+            year=year
+        ).first()
+
+        if exists:
+            results.append({
+                "employee_id": emp.id,
+                "file_path": exists.file_path,
+                "status": "already_exists"
+            })
+            continue
+
+        # 2 — get attendance
+        attendance = Attendance.objects.filter(
+            employee=emp,
+            date__month=month,
+            date__year=year
+        )
+        present_days = attendance.filter(status="present").count()
+        absent_days = attendance.filter(status="absent").count()
+
+        # 3 — approved leaves in month
+        leaves = LeaveApplication.objects.filter(
+            employee=emp,
+            status="approved",
+            start_date__month=month,
+            start_date__year=year
+        ).count()
+
+        # 4 — insurance expiring this month
+        insurance_exp = EmployeeInsurance.objects.filter(
+            employee=emp,
+            end_date__month=month,
+            end_date__year=year
+        ).count()
+
+        # 5 — complaints
+        total_comp = Complaint.objects.filter(employee=emp).count()
+        resolved_comp = Complaint.objects.filter(employee=emp, status="resolved").count()
+        unresolved_comp = total_comp - resolved_comp
+
+        # 6 — write file content
+        content = f"""
+Employee Monthly Report
+=======================
+
+Employee Name: {emp.full_name}
+Employee ID: {emp.id}
+Month: {month}-{year}
+
+Attendance
+----------
+Present: {present_days}
+Absent: {absent_days}
+
+Leaves Approved: {leaves}
+
+Insurance Expiring This Month: {insurance_exp}
+
+Complaints:
+  Total: {total_comp}
+  Resolved: {resolved_comp}
+  Unresolved: {unresolved_comp}
+"""
+
+        # 7 — write file physically
+        file_name = f"employee_{emp.id}_{month}_{year}.txt"
+        file_path = os.path.join(base_folder, file_name)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        db_path = f"employee_reports/{file_name}"
+
+        # 8 — save to MySQL
+        MonthlyEmployeeReport.objects.create(
+            employee=emp,
+            month=month,
+            year=year,
+            file_path=db_path
+        )
+
+        results.append({
+            "employee_id": emp.id,
+            "file_path": db_path,
+            "status": "created"
+        })
+
+    return JsonResponse({"status": "success", "employee_reports": results})
+
+
+def generate_company_report(month, year):
+
+    exists = MonthlyCompanyReport.objects.filter(
+        month=month,
+        year=year
+    ).first()
+
+    if exists:
+        return JsonResponse({
+            "status": "already_exists",
+            "file_path": exists.file_path
+        })
+
+    # 2 — aggregated company-wide data
+    total_employees = Employee.objects.count()
+
+    presents = Attendance.objects.filter(
+        date__month=month,
+        date__year=year,
+        status="present"
+    ).count()
+
+    absents = Attendance.objects.filter(
+        date__month=month,
+        date__year=year,
+        status="absent"
+    ).count()
+
+    leaves = LeaveApplication.objects.filter(
+        status="approved",
+        start_date__month=month,
+        start_date__year=year
+    ).count()
+
+    insurance_expiring = EmployeeInsurance.objects.filter(
+        end_date__month=month,
+        end_date__year=year
+    ).count()
+
+    total_complaints = Complaint.objects.count()
+    resolved = Complaint.objects.filter(status="resolved").count()
+    unresolved = total_complaints - resolved
+
+    # 3 — prepare content
+    content = f"""
+Company Monthly Report
+======================
+
+Month: {month}-{year}
+
+Total Employees: {total_employees}
+
+Attendance Summary:
+  Present: {presents}
+  Absent: {absents}
+
+Approved Leaves: {leaves}
+
+Insurance Expiring This Month: {insurance_expiring}
+
+Complaints:
+  Total: {total_complaints}
+  Resolved: {resolved}
+  Unresolved: {unresolved}
+"""
+
+    # 4 — write file
+    folder = os.path.join(settings.MEDIA_ROOT, "company_reports")
+    os.makedirs(folder, exist_ok=True)
+
+    file_name = f"company_report_{month}_{year}.txt"
+    file_path = os.path.join(folder, file_name)
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    db_path = f"company_reports/{file_name}"
+
+    # 5 — save MySQL
+    MonthlyCompanyReport.objects.create(
+        month=month,
+        year=year,
+        file_path=db_path
+    )
+
+    return JsonResponse({
+        "status": "created",
+        "file_path": db_path
+    })
