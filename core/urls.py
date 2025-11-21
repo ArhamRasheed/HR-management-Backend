@@ -44,16 +44,22 @@ urlpatterns = [
     path('leaves/employees', views.employee_leave, name='employee_leaves'),
     
     path('attendance/view/', views.view_attendance_view, name='view_attendance'),
-
+    path('attendance/mark/<int:employee_id>/', views.mark_attendance, name='mark_attendance'),
+    
     path('insurance/all/', views.insurance_view, name='insurance'),
     path('add_insurance/', views.add_insurance_view, name='add_insurance'),
     path('insurance/<int:insurance_id>/delete/', views.delete_insurance, name='delete_leave'),
     path('insurance/<int:insurance_id>/update/', views.update_insurance, name='update_leave_status'),
     path('insurance/employees/', views.insured_employees_view, name='insured_employees'),
     
-    #path('apply-insurances/<int:employee_id>/', views.edit_insurances_view, name='edit_insurances'),
-    #path('apply-leaves/<int:employee_id>/', views.edit_leaves_view, name='edit_leaves'),
+    path('edit-insurances/<int:employee_id>/', views.edit_insurances_view, name='edit_insurances'),
+    path('edit-leaves/<int:employee_id>/', views.edit_leaves_view, name='edit_leaves'),
     
-
-
+    path('apply-insurance/<int:employee_id>/', views.apply_insurences, name='apply_insurances'),
+    path('apply-leaves/<int:employee_id>/', views.apply_leaves, name='apply_leaves'),
+    
+    path('complain/all/', views.all_complaints_view, name='all_complains'),
+    path('add_complain/', views.add_complaint_view, name='add_complain'),
+    path('complain/<int:complain_id>/delete/', views.delete_complain, name='delete_complain'),
+    path('complain/<int:complain_id>/update/', views.update_complain, name='update_complain'),
 ]

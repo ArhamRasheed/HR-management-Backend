@@ -15,6 +15,8 @@ from .decorators import hr_required
 from django.utils import timezone
 from decimal import Decimal
 from django.contrib.auth.hashers import make_password
+from django.db.models import Count, Sum
+
 
 allowed_positions_for_departments = {
     'IT': ['Software Engineer', 'CTO', 'System Administrator', 'CEO', 'Manager'],
@@ -87,10 +89,12 @@ def update_employee(request, employee_id): #update
             return JsonResponse({'message': 'CTO already exists.'}, status=400)
         if new_val not in Designation.objects.values_list('designation_name', flat=True):
             return JsonResponse({'message': 'Designation does not exist.'}, status=400)
-        Employee.objects.filter(id=employee_id).update(designation_id=Designation.objects.get(designation_name=new_val).id)
+        emp = Employee.objects.filter(id=employee_id)
+        emp.update(designation_id=Designation.objects.get(designation_name=new_val).id)
+        emp.save()
         return JsonResponse({'message': 'Employee designation updated successfully.'})
 
-@api_view(['PUT'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
 @hr_required
 def add_department(request):
@@ -110,7 +114,7 @@ def delete_department(request, department_name):
     Department.objects.filter(department_name=department_name).delete()
     return JsonResponse({'message': 'Department deleted successfully.'})
 
-@api_view(['PUT'])
+@api_view(['PUT', 'GET'])
 @permission_classes([AllowAny])
 @hr_required
 def update_department(request, department_name): #update
@@ -120,7 +124,9 @@ def update_department(request, department_name): #update
     if to_update == 'department_name':
         if Department.objects.filter(department_name=new_val).exists():
             return JsonResponse({'message': 'Department already exists.'}, status=400)
-        Department.objects.filter(department_name=department_name).update(department_name=new_val)
+        dep = Department.objects.get(department_name=department_name)
+        dep.department_name=new_val
+        dep.save()
         return JsonResponse ({'message': 'Department name updated successfully.'})
 
 @api_view(['POST'])
@@ -145,7 +151,7 @@ def delete_designation(request,designation_name):
     return JsonResponse({'message': 'Designation deleted successfully.'})
 
 
-@api_view(['PUT'])
+@api_view(['PUT', 'GET'])
 @permission_classes([AllowAny])
 @hr_required
 def update_designation(request, designation_name): #update
@@ -155,7 +161,9 @@ def update_designation(request, designation_name): #update
     if to_update == 'designation_name':
         if Designation.objects.filter(designation_name=new_val).exists():
             return JsonResponse({'message': 'Designation already exists.'}, status=400)
-        Designation.objects.filter(designation_name=designation_name).update(designation_name=new_val)
+        des = Designation.objects.get(designation_name=designation_name)
+        des.designation_name=new_val
+        des.save()
         return JsonResponse ({'message': 'Designation name updated successfully.'})
 
 @api_view(['GET'])
@@ -260,73 +268,63 @@ def logout_view(request):
         'success': True,
         'message': 'Logged out successfully'
     })
+    
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@hr_required
 def dashboard_view(request):
-    employee_id = request.session.get('employee_id')
-    if not employee_id:
-        return JsonResponse({'message': 'Employee not found in session'}, status=404)
-    employee = Employee.objects.filter(id=employee_id).first()
-    if not employee:
-        return JsonResponse({
-            'message': 'Employee not found.'
-        }, status=404)
-    insurances = EmployeeInsurance.objects.filter(employee=employee)
-    leaves = LeaveApplication.objects.filter(employee=employee)
-    attendances = Attendance.objects.filter(employee=employee)
-    complaints = Complaint.objects.filter(employee=employee)
-    insurances_data = [
-        {
-            'plan_name': insurance.insurance_plan.plan_name,
-            'coverage_amount': insurance.insurance_plan.coverage_amount,
-            'premium': insurance.insurance_plan.premium_amount,
-            'start_date': insurance.start_date,
-            'end_date': insurance.end_date,
-            'status': insurance.status,
-            'monthly_deduction': insurance.monthly_deduction,
-        }
-        for insurance in insurances
+    total_active_employees = Employee.objects.filter(employment_status="active").count()
+
+    present_today = Attendance.objects.filter(status="present").count()
+    absent_today = Attendance.objects.filter(status="absent").count()
+    total_attendance = present_today + absent_today
+
+    if total_attendance > 0:
+        presence_ratio = round(present_today / total_attendance, 2)
+        absence_ratio = round(absent_today / total_attendance, 2)
+    else:
+        presence_ratio = 0
+        absence_ratio = 0
+
+    unresolved_complaints = Complaint.objects.filter(status="open").count()
+
+    total_insurances = EmployeeInsurance.objects.count()
+    
+    today = date.today()
+    start_of_month = today.replace(day=1)
+
+    new_hires = Employee.objects.filter(joining_date__gte=start_of_month, joining_date__lte=today).count()
+
+    total_departments = Department.objects.count()
+
+    employees_per_department = Employee.objects.values('department__department_name').annotate(
+        count=Count('id')
+    )
+
+    pending_leaves = LeaveApplication.objects.filter(status="pending").count()
+
+    total_payroll = Payroll.objects.aggregate(
+        total=Sum('net_salary')
+    )['total'] or 0
+
+    dept_emp_list = [
+        {"department": d['department__department_name'], "employee_count": d['count']}
+        for d in employees_per_department
     ]
-    leaves_data = [
-        {
-            'leave_type': leave.leave_type.leave_type_name,
-            'start_date': leave.start_date,
-            'end_date': leave.end_date,
-            'total_days': leave.total_days,
-            'status': leave.status,
-            'applied_on': leave.applied_date
-        }
-        for leave in leaves
-    ]
-    attendance_data = [
-        {
-            'check_in': attendance.check_in_time,
-            'check_out': attendance.check_out_time,
-            'attendance_date': attendance.attendance_date,
-            'status': attendance.status
-        }
-        for attendance in attendances
-    ]
-    complaints_data = [
-        {       
-            'subject': complaint.subject,
-            'description': complaint.description,
-            'status': complaint.status,
-            'filed_on': complaint.filed_date
-        }
-        for complaint in complaints
-    ]
+
     return JsonResponse({
-        'full_name': employee.full_name,    
-        'department': employee.department.department_name if employee.department else None,
-        'designation': employee.designation.designation_name if employee.designation else None,
-        'date_of_joining': employee.joining_date,
-        'leaves': leaves_data,
-        'insurances': insurances_data,
-        'attendances': attendance_data,
-        'complaints': complaints_data
-    })
+        "total_active_employees": total_active_employees,
+        "presence_ratio": presence_ratio,
+        "absence_ratio": absence_ratio,
+        "unresolved_complaints": unresolved_complaints,
+        "total_insurances": total_insurances,
+        "new_hires_this_month": new_hires,
+        "total_departments": total_departments,
+        "employees_per_department": dept_emp_list,
+        "pending_leaves": pending_leaves,
+        "total_payroll": float(total_payroll)
+    }, status=200)
 
 @hr_required
 @api_view(['GET'])
@@ -339,8 +337,6 @@ def employee_list_view(request):
             'full_name': emp.full_name,
             'email': emp.email,
             'phone_number': emp.phone,
-            'department': emp.department.department_name if emp.department else None,
-            'designation': emp.designation.designation_name if emp.designation else None,
             'employment_status': emp.employment_status,
             'joining_date': emp.joining_date,
             'termination_date': emp.termination_date if emp.termination_date else 'N/A'
@@ -459,6 +455,7 @@ def hire_employee_view(request):
     if not candidate:
         return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
     if(add_employee(candidate.full_name, candidate.email, candidate.phone, candidate.applied_position, candidate.department, password)):
+        candidate.delete()
         return JsonResponse({'message': 'Employee hired successfully.'})
     else:
         return JsonResponse({'message': 'Something went wrong.'}, status=404)
@@ -551,7 +548,7 @@ def old_employee_records_view(request):
     return JsonResponse({'old_employees': old_employees_data})
 
     
-def generate_payroll_view(request, employee_id):
+def generate_payroll_view(request):
     month = int(request.GET.get('month', timezone.now().month))
     year = int(request.GET.get('year', timezone.now().year))
     
@@ -647,8 +644,18 @@ def generate_payroll_view(request, employee_id):
     return JsonResponse({'status': 'success', 'payrolls': payrolls_data})
     
 def payroll_history_view(request):
-    # Implementation of payroll history view
-    pass
+    payrolls = Payroll.objects.all()
+    payroll_data = [
+        {
+            "employee" : p.employee.full_name,
+            "net salary" : p.net_salary,
+            "month" : p.month,
+            "year": p.year,
+            "status": p.status
+        }
+        for p in payrolls
+    ]
+    return JsonResponse ({"Payrolls" : payroll_data})
 
 
 @api_view(['POST'])
@@ -704,46 +711,12 @@ def delete_designation_view(request):
     delete_designation(designation_name)
     return JsonResponse({'message': 'Designation deleted successfully.'})
 
-@api_view(['PUT'])
-@permission_classes([AllowAny])
-@hr_required
-def update_department_view(request):
-    data = json.loads(request.body)
-    department_name = data.get('department_name')
-    if not department_name:
-        return JsonResponse({'message': 'No data provided for update.'}, status=400)
-    dep = Department.objects.filter(department_name=department_name)
-    if not dep.exists():
-        return JsonResponse({'message': 'Department not found.'}, status=404)
-    update_department(department_name, department_name)
-    return JsonResponse({'message': 'Department updated successfully.'})
-
-@api_view(['PUT'])
-@permission_classes([AllowAny])
-@hr_required
-def update_designation_view(request, designation_name):
-    data = json.loads(request.body)
-    designation_name = data.get('designation_name')
-    if not designation_name:
-        return JsonResponse({'message': 'No data provided for update.'}, status=400)
-    desig = Designation.objects.filter(designation_name=designation_name)
-    if not desig.exists():
-        return JsonResponse({'message': 'Designation not found.'}, status=404)
-    update_designation(designation_name, designation_name)
-    return JsonResponse({'message': 'Designation updated successfully.'})
-
-
-
-
 
 @csrf_exempt
 @hr_required
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def generate_report_view(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=400)
-
     data = json.loads(request.body)
 
     report_type = data.get("report_type")   # "employee" or "company"
@@ -772,7 +745,7 @@ def generate_employee_reports(month, year):
 
     for emp in employees:
 
-        # 1 — check if report already exists
+        
         exists = MonthlyEmployeeReport.objects.filter(
             employee=emp,
             month=month,
@@ -787,7 +760,7 @@ def generate_employee_reports(month, year):
             })
             continue
 
-        # 2 — get attendance
+        
         attendance = Attendance.objects.filter(
             employee=emp,
             date__month=month,
@@ -796,7 +769,7 @@ def generate_employee_reports(month, year):
         present_days = attendance.filter(status="present").count()
         absent_days = attendance.filter(status="absent").count()
 
-        # 3 — approved leaves in month
+        
         leaves = LeaveApplication.objects.filter(
             employee=emp,
             status="approved",
@@ -804,19 +777,19 @@ def generate_employee_reports(month, year):
             start_date__year=year
         ).count()
 
-        # 4 — insurance expiring this month
+        
         insurance_exp = EmployeeInsurance.objects.filter(
             employee=emp,
             end_date__month=month,
             end_date__year=year
         ).count()
 
-        # 5 — complaints
+        
         total_comp = Complaint.objects.filter(employee=emp).count()
         resolved_comp = Complaint.objects.filter(employee=emp, status="resolved").count()
         unresolved_comp = total_comp - resolved_comp
 
-        # 6 — write file content
+        
         content = f"""
 Employee Monthly Report
 =======================
@@ -840,7 +813,7 @@ Complaints:
   Unresolved: {unresolved_comp}
 """
 
-        # 7 — write file physically
+        
         file_name = f"employee_{emp.id}_{month}_{year}.txt"
         file_path = os.path.join(base_folder, file_name)
 
@@ -849,7 +822,7 @@ Complaints:
 
         db_path = f"employee_reports/{file_name}"
 
-        # 8 — save to MySQL
+        
         MonthlyEmployeeReport.objects.create(
             employee=emp,
             month=month,
@@ -882,8 +855,8 @@ def generate_company_report(month, year):
             "file_path": exists.file_path
         })
 
-    # 2 — aggregated company-wide data
-    total_employees = Employee.objects.count()
+    #
+    total_employees = Employee.objects.filter(employment_status='active').count()
 
     presents = Attendance.objects.filter(
         date__month=month,
@@ -912,7 +885,7 @@ def generate_company_report(month, year):
     resolved = Complaint.objects.filter(status="resolved").count()
     unresolved = total_complaints - resolved
 
-    # 3 — prepare content
+   
     content = f"""
 Company Monthly Report
 ======================
@@ -935,7 +908,7 @@ Complaints:
   Unresolved: {unresolved}
 """
 
-    # 4 — write file
+    
     folder = os.path.join(settings.MEDIA_ROOT, "company_reports")
     os.makedirs(folder, exist_ok=True)
 
@@ -947,7 +920,7 @@ Complaints:
 
     db_path = f"company_reports/{file_name}"
 
-    # 5 — save MySQL
+    
     MonthlyCompanyReport.objects.create(
         month=month,
         year=year,
@@ -969,8 +942,8 @@ def leave_list_view(request):
         {
             'id': leave.id,
             'leave_type_name': leave.leave_type_name,
-            'description': leave.description,
-            'max_days_allowed': leave.max_days_allowed,
+            'description': leave.policy_description,
+            'max_days_allowed': leave.max_days_per_year,
         }
         for leave in leaves
     ]
@@ -998,7 +971,7 @@ def add_leave_view(request):
     return JsonResponse({'message': 'Leave type added successfully.'})
 
 @hr_required
-@api_view(['PUT'])
+@api_view(['PUT', 'GET'])
 @permission_classes([AllowAny])
 def update_leave_status(request, leave_type_name):
     data = json.loads(request.body)
@@ -1015,7 +988,9 @@ def update_leave_status(request, leave_type_name):
         LeaveType.objects.filter(leave_type_name=leave_type_name).update(description=new_val)
         return JsonResponse ({'message': 'Leave type description updated successfully.'})
     elif to_update == 'max_days_allowed':
-        LeaveType.objects.filter(leave_type_name=leave_type_name).update(max_days_allowed=new_val)
+        le = LeaveType.objects.get(leave_type_name=leave_type_name)
+        le.max_days_per_year=new_val
+        le.save()
         return JsonResponse ({'message': 'Leave type max days allowed updated successfully.'})
     return JsonResponse ({'message': "updating a non-existing field"}, status=400)
 
@@ -1059,7 +1034,6 @@ def insured_employees_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def view_attendance_view(request):
-    # Performance optimized: one JOIN, no N+1
     attendances = Attendance.objects.select_related('employee').all()
 
     result = [
@@ -1085,8 +1059,8 @@ def insurance_view(request):
         {
             'id': insurance.id,
             'plan_name': insurance.plan_name,
-            'coverage': insurance.coverage,  # include any other fields you want
-            'premium': str(insurance.premium)  # convert Decimal to string for JSON
+            'coverage': str(insurance.coverage_amount),  # include any other fields you want
+            'premium': str(insurance.premium_amount)  # convert Decimal to string for JSON
         }
         for insurance in insurances
     ]
@@ -1121,9 +1095,9 @@ def add_insurance_view(request):
                 "insurance": {
                     "id": insurance.id,
                     "plan_name": insurance.plan_name,
-                    "coverage": insurance.coverage,
-                    "premium": str(insurance.premium),
-                    "policy_term": insurance.policy_term
+                    "coverage": str(insurance.coverage_amount),
+                    "premium": str(insurance.premium_amount),
+                    "policy_term": insurance.policy_terms
                 }
             }, status=201)
 
@@ -1209,8 +1183,8 @@ def employee_leave(request):
             'leave_type': {
                 'id': la.leave_type.id,
                 'leave_type_name': la.leave_type.leave_type_name,
-                'description': la.leave_type.description,
-                'max_days_allowed': la.leave_type.max_days_allowed,
+                'description': la.leave_type.policy_description,
+                'max_days_allowed': la.leave_type.max_days_per_year,
             },
             'start_date': la.start_date,
             'end_date': la.end_date,
@@ -1223,5 +1197,416 @@ def employee_leave(request):
 
     return JsonResponse({'leave_applications': result}, safe=False)
 
+@hr_required
+@api_view(['PUT', 'GET'])
+@permission_classes([AllowAny])
+def edit_insurances_view(request, employee_id):
+    try:
+        data = json.loads(request.body)
+    except:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    insurance_id = data.get("insurance_id")
+    new_status = data.get("status")
+    extend_end_date = data.get("extend_end_date")  # YYYY-MM-DD
+    deduction = data.get('new_deduction')
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({"message": "Invalid Employee"}, status=404)
+
+    if not insurance_id:
+        return JsonResponse({"message": "insurance_id is required"}, status=400)
+
+    try:
+        emp_ins = EmployeeInsurance.objects.get(employee=employee, insurance_plan_id=insurance_id)
+    except EmployeeInsurance.DoesNotExist:
+        return JsonResponse({"message": "Insurance record not found for this employee"}, status=404)
+
+    if new_status:
+        if new_status not in ["active", "inactive"]:
+            return JsonResponse({"message": "Status must be 'active' or 'inactive'"}, status=400)
+        emp_ins.status = new_status
+
+    if extend_end_date:
+        try:
+            new_end_date = datetime.strptime(extend_end_date, "%Y-%m-%d").date()
+        except:
+            return JsonResponse({"message": "Invalid date format. Use YYYY-MM-DD"}, status=400)
+
+        if new_end_date < emp_ins.end_date:
+            return JsonResponse({"message": "New end date cannot be earlier than existing end date"}, status=400)
+        emp_ins.end_date = new_end_date
+
+        if deduction and deduction > Decimal('0.00'):
+            emp_ins.monthly_deduction = Decimal(deduction)
+
+    emp_ins.save()
+
+    return JsonResponse({
+        "message": "Insurance updated successfully",
+        "insurance_record": {
+            "id": emp_ins.id,
+            "employee": employee.full_name,
+            "insurance_plan": emp_ins.insurance_plan.plan_name,
+            "status": emp_ins.status,
+            "start_date": emp_ins.start_date,
+            "end_date": emp_ins.end_date,
+        }
+    }, status=200)
 
     
+    
+@api_view(['POST'])
+@hr_required
+@permission_classes([AllowAny])
+def mark_attendance(request, employee_id):
+
+    try:
+        data = json.loads(request.body)
+    except:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    date = data.get('attendance_date')
+    check_in_time = data.get('check_in_time')
+    check_out_time = data.get('check_out_time')
+    status = data.get('status')
+
+    if not date:
+        return JsonResponse({'message': "Attendance date is required"}, status=400)
+    try:
+        att_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({'message': "Invalid date format, use YYYY-MM-DD"}, status=400)
+
+    if att_date > date.today():
+        return JsonResponse({'message': "Attendance date cannot be in the future"}, status=400)
+    
+    if status == 'present' and (not check_in_time or not check_out_time):
+        return JsonResponse({'message': "Check-in and Check-out time required for present status"}, status=400)
+
+    
+    try:
+        emp = Employee.objects.get(employee_id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({'message': "Employee not found"}, status=404)
+
+    
+    existing_attendance = Attendance.objects.filter(employee=emp, attendance_date=date).first()
+    if existing_attendance:
+        return JsonResponse({'message': "Attendance already marked for this date"}, status=409)
+
+    
+    att = Attendance.objects.create(
+        employee=emp,
+        attendance_date=date,
+        check_in_time=check_in_time if status == "present" else None,
+        check_out_time=check_out_time if status == "present" else None,
+        status=status
+    )
+
+    return JsonResponse({
+        "message": "Attendance marked successfully",
+        "attendance": {
+            "id": att.id,
+            "employee_id": emp.employee_id,
+            "employee_name": emp.full_name,
+            "date": att.attendance_date,
+            "check_in": att.check_in_time,
+            "check_out": att.check_out_time,
+            "status": att.status
+        }
+    }, status=201)
+
+
+@api_view(['PUT', 'GET'])
+@hr_required
+@permission_classes([AllowAny])
+def edit_leaves_view(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({"message": "Invalid Employee"}, status=404)
+
+    data = json.loads(request.body)
+
+    leave_id = data.get("leave_id")
+    new_status = data.get("status")
+    is_paid = data.get("is_paid")
+
+    if not leave_id:
+        return JsonResponse({"message": "leave_id is required"}, status=400)
+
+    try:
+        leave_record = LeaveApplication.objects.get(id=leave_id, employee=employee)
+    except LeaveApplication.DoesNotExist:
+        return JsonResponse({"message": "Leave record not found"}, status=404)
+
+    today = date.today()
+    if leave_record.start_date <= today:
+        return JsonResponse({
+            "message": "Cannot modify leave after or on start date"
+        }, status=400)
+
+    if new_status:
+        if new_status not in ["pending", "approved", "rejected"]:
+            return JsonResponse({"message": "Invalid status"}, status=400)
+        leave_record.status = new_status
+
+
+    if is_paid is not None:
+        if type(is_paid) is not bool:
+            return JsonResponse({"message": "is_paid must be true or false"}, status=400)
+        leave_record.is_paid = is_paid
+
+    leave_record.save()
+
+    return JsonResponse({
+        "message": "Leave updated successfully",
+        "leave": {
+            "id": leave_record.id,
+            "employee": employee.full_name,
+            "start_date": leave_record.start_date,
+            "end_date": leave_record.end_date,
+            "status": leave_record.status,
+            "is_paid": leave_record.is_paid
+        }
+    }, status=200)
+
+@api_view(['POST'])
+@hr_required
+@permission_classes([AllowAny])
+def apply_insurences(request, employee_id):
+    try:
+        data = json.loads(request.body)
+    except:
+        return JsonResponse({"message": "Invalid JSON"}, status=400)
+
+    insurance_name = data.get("insurance_name")
+
+    if not insurance_name:
+        return JsonResponse({"message": "insurance_name is required"}, status=400)
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({"message": "Invalid employee"}, status=404)
+
+    try:
+        insurance = InsurancePlan.objects.get(plan_name__iexact=insurance_name)
+    except InsurancePlan.DoesNotExist:
+        return JsonResponse({"message": "Insurance not found"}, status=404)
+
+    active_count = EmployeeInsurance.objects.filter(employee=employee, status="active").count()
+    if active_count >= 3:
+        return JsonResponse({"message": "Employee already has maximum of 3 active insurances"}, status=400)
+
+    exists = EmployeeInsurance.objects.filter(employee=employee, insurance_plan=insurance, status="active").exists()
+    if exists:
+        return JsonResponse({"message": "This insurance is already active for the employee"}, status=409)
+    
+    deduction = employee.basic_salary * Decimal("0.001")
+
+    today = date.today()
+    end_date = today + timedelta(days=365)
+
+    emp_ins = EmployeeInsurance.objects.create(
+        employee=employee,
+        insurance_plan=insurance,
+        status="active",
+        start_date=today,
+        end_date=end_date,
+        deduction=deduction
+    )
+
+    return JsonResponse({
+        "message": "Insurance applied successfully",
+        "insurance_record": {
+            "id": emp_ins.id,
+            "employee": employee.full_name,
+            "insurance": insurance.plan_name,
+            "status": emp_ins.status,
+            "deduction": str(emp_ins.deduction),
+            "start_date": emp_ins.start_date,
+            "end_date": emp_ins.end_date
+        }
+    }, status=201)
+
+@api_view(['POST'])
+@hr_required
+@permission_classes([AllowAny])
+def apply_leaves(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return JsonResponse({"message": "Invalid Employee"}, status=404)
+
+    data = json.loads(request.body)
+
+    start_date = data.get("start_date")       # YYYY-MM-DD
+    end_date = data.get("end_date")           # YYYY-MM-DD
+    leave_type = data.get("leave_type")       # sick, casual, annual, etc.
+    is_paid = data.get("is_paid", False)
+
+    
+    if not start_date or not end_date or not leave_type:
+        return JsonResponse({"message": "start_date, end_date, and leave_type are required"}, status=400)
+
+    
+    try:
+        s_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        e_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({"message": "Invalid date format. Use YYYY-MM-DD"}, status=400)
+
+    today = date.today()
+
+    
+    if s_date > e_date:
+        return JsonResponse({"message": "start_date cannot be after end_date"}, status=400)
+
+    
+    if s_date < today:
+        return JsonResponse({"message": "Cannot apply for leave in the past"}, status=400)
+
+    overlapping = LeaveApplication.objects.filter(
+        employee=employee,
+        start_date__lte=e_date,
+        end_date__gte=s_date,
+        status__in=["pending", "approved"]
+    ).exists()
+
+    if overlapping:
+        return JsonResponse({"message": "This leave overlaps with an existing request"}, status=409)
+    
+    leave = LeaveApplication.objects.create(
+        employee=employee,
+        leave_type=leave_type,
+        start_date=s_date,
+        end_date=e_date,
+        status="pending",
+        is_paid=is_paid
+    )
+
+    return JsonResponse({
+        "message": "Leave request submitted successfully",
+        "leave": {
+            "id": leave.id,
+            "employee": employee.full_name,
+            "leave_type": leave.leave_type,
+            "start_date": leave.start_date,
+            "end_date": leave.end_date,
+            "status": leave.status,
+            "is_paid": leave.is_paid
+        }
+    }, status=201)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def all_complaints_view(request):
+    complaints = Complaint.objects.all().select_related("employee")
+
+    result = []
+
+    for c in complaints:
+        result.append({
+            "id": c.id,
+            "employee_id": c.employee.id,
+            "employee_name": c.employee.full_name,
+            "title": c.subject,
+            "description": c.description,
+            "status": c.status,
+            "created_at": c.filed_date
+        })
+
+    return JsonResponse ({"complaints": result}, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def add_complaint_view(request):
+    data = json.loads(request.body)
+
+    email = data.get("email")
+    title = data.get("title")
+    description = data.get("description")
+
+    
+    if not email or not title or not description:
+        return JsonResponse({"message": "employee_id, title and description are required"}, status=400)
+
+    
+    try:
+        employee = Employee.objects.get(email=email, employment_status='active')
+    except Employee.DoesNotExist:
+        return JsonResponse({"message": "Invalid employee"}, status=404)
+
+    
+    complaint = Complaint.objects.create(
+        employee=employee,
+        subject=title,
+        description=description,
+        status="pending"   
+    )
+
+    return JsonResponse({
+        "message": "Complaint submitted successfully",
+        "complaint": {
+            "id": complaint.id,
+            "employee_id": employee.id,
+            "employee_name": employee.full_name,
+            "title": complaint.subject,
+            "description": complaint.description,
+            "status": complaint.status,
+            "created_at": complaint.filed_date
+        }
+    }, status=201)
+
+    
+@api_view(['DELETE'])
+@hr_required
+@permission_classes([AllowAny])
+def delete_complain(request, complain_id):
+    try:
+        complain = Complaint.objects.get(id=complain_id)
+    except Complaint.DoesNotExist:
+        return JsonResponse({'message': 'Complaint not found'}, status=404)
+
+    complain.delete()
+    return JsonResponse({'message': 'Complaint deleted successfully'}, status=200)
+
+@api_view(['PUT', 'GET'])
+@hr_required
+@permission_classes([AllowAny])
+def update_complain(request, complain_id):
+    
+    allowed_statuses = ['resolved', 'closed']
+
+    try:
+        complain = Complaint.objects.get(id=complain_id)
+    except Complaint.DoesNotExist:
+        return JsonResponse({'message': 'Complaint not found'}, status=404)
+
+    data = json.loads(request.body)
+    new_status = data.get('status')
+
+    if not new_status:
+        return JsonResponse({'message': 'Status is required'}, status=400)
+
+    if new_status not in allowed_statuses:
+        return JsonResponse({
+            'message': f"Invalid status. Allowed values: {allowed_statuses}"
+        }, status=400)
+
+
+    complain.status = new_status
+    if new_status == 'resolved':
+        complain.resolved_date = date.today()
+    complain.save()
+
+    return JsonResponse({
+        'message': 'Complaint status updated successfully',
+        'complaint_id': complain_id,
+        'new_status': new_status
+    }, status=200)
+
