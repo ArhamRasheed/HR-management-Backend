@@ -21,41 +21,53 @@ from django.db.models import Count, Sum
 allowed_positions_for_departments = {
     'IT': ['Software Engineer', 'CTO', 'System Administrator', 'CEO', 'Manager'],
     'HR': ['Manager', 'Recruiter', 'CEO'],
-    'Finance': ['Accountant', 'Financial Analyst', 'CEO'],
+    'Finance': ['Accountant', 'Financial Analyst', 'CEO', 'Manager'],
     'Sales': ['Sales Executive', 'Manager', 'CEO'],
     'Marketing': ['Marketing Executive', 'Manager', 'CEO'],
 }
 
-def add_employee(full_name, email, phone, applied_position, department, password):
-    if department.department_name == 'HR' and not password:
-        return False
+def add_employee(full_name, phone, applied_position, department):
     if applied_position.designation_name == 'CEO':
         ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
         if ceos.exists():
             return False
-    if applied_position.designation_name == 'CTO' and (not department == 'IT' or Employee.objects.filter(designation__designation_name='CTO').exists()):
+    if applied_position.designation_name == 'CTO' and (not department.department_name == 'IT' or Employee.objects.filter(designation__designation_name='CTO').exists()):
         return False
-    if applied_position not in allowed_positions_for_departments.get(department.department_name, []):
+    if applied_position.designation_name not in allowed_positions_for_departments.get(department.department_name, []):
         return False
-    Employee.objects.create(
+    if department.department_name == 'HR':
+        pass_word = make_password(full_name.split()[0].lower())
+    else:
+        pass_word = None
+    employee = Employee.objects.create(
         full_name=full_name, 
-        email=email, 
+        email=full_name.replace(" ", "_").lower() + "@example.com",
         phone=phone, 
-        password=make_password(password),
+        password_hash=pass_word,
         department=department, 
         employment_status="active",
-        designation=applied_position)
+        designation=applied_position,
+        joining_date=timezone.now().date()
+    )
+    if department.manager is None:
+        department.manager = employee
+        department.manager_start_date = timezone.now().date()
+        department.save()
     return True
 
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
 @hr_required
-def delete_employee(employee_id):
-    Employee.objects.filter(id=employee_id).delete()
-    return JsonResponse({'message': 'Employee deleted successfully.'})
+def delete_employee(request, employee_id):
+    try:
+        Employee.objects.filter(id=employee_id).delete()
+        return JsonResponse({'message': 'Employee deleted successfully.'})
+    except Employee.DoesNotExist:
+        return JsonResponse({'message': 'Employee not found'})
+    
 
 
-@api_view(['PUT'])
+@api_view(['PUT', 'GET'])
 @permission_classes([AllowAny])
 @hr_required
 def update_employee(request, employee_id): #update
@@ -64,35 +76,53 @@ def update_employee(request, employee_id): #update
     new_val = data.get('new_val')
     if not to_update or not new_val:
         return JsonResponse({'message': 'No data provided for update.'}, status=400)
-    if to_update == 'full_name':
-        Employee.objects.filter(id=employee_id).update(full_name=new_val)
-        return JsonResponse({'message': 'Employee name updated successfully.'})
-    elif to_update == 'email':
-        Employee.objects.filter(id=employee_id).update(email=new_val)
-        return JsonResponse({'message': 'Employee email updated successfully.'})
-    elif to_update == 'phone':
-        Employee.objects.filter(id=employee_id).update(phone=new_val)
+    try:
+        emp = Employee.objects.get(id=employee_id, employment_status='active')
+    except Employee.DoesNotExist:
+        return JsonResponse({'message': 'Invalid ID for update.'}, status=400)
+    if to_update == 'phone':
+        emp.phone=new_val
+        emp.save()
         return JsonResponse({'message': 'Employee phone updated successfully.'})
-    elif to_update == 'department_name':
-        if new_val not in Department.objects.values_list('department_name', flat=True):
-            return JsonResponse({'message': 'Department does not exist.'}, status=400)
-        Employee.objects.filter(id=employee_id).update(department_id=Department.objects.get(department_name=new_val).id)
-        return JsonResponse({'message': 'Employee department updated successfully.'})
-    elif to_update == 'designation_name':
+    elif to_update == 'designation':
+        if not Designation.objects.filter(designation_name=new_val).exists():
+            return JsonResponse({'message': 'Designation does not exist.'}, status=400)
         if new_val == 'CEO':
-            ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
+            ceo_designation = Designation.objects.get(designation_name='CEO')
+
+            ceos = Employee.objects.filter(
+            designation=ceo_designation,
+            employment_status='active'
+            )
             if ceos.exists():
                 return JsonResponse({'message': 'CEO already exists.'}, status=400)
-        elif new_val == 'CTO' and not Employee.objects.filter(employee_id=employee_id).department.department_name == 'IT':
+        elif new_val == 'CTO' and not Employee.objects.filter(id=employee_id).first().department.department_name == 'IT':
             return JsonResponse({'message': 'Only IT department can have CTO designation.'}, status=400)
-        elif new_val == 'CTO' and Employee.objects.filter(designation__designation_name='CTO').exists():
+        elif new_val == 'CTO' and Employee.objects.filter(designation__designation_name='CTO', employment_status='active').exists():
             return JsonResponse({'message': 'CTO already exists.'}, status=400)
         if new_val not in Designation.objects.values_list('designation_name', flat=True):
             return JsonResponse({'message': 'Designation does not exist.'}, status=400)
-        emp = Employee.objects.filter(id=employee_id)
-        emp.update(designation_id=Designation.objects.get(designation_name=new_val).id)
+        if new_val not in allowed_positions_for_departments.get(
+            emp.department.department_name, []
+            ):
+            return JsonResponse ({"message": "Invalid Designation"})
+        new_designation = Designation.objects.get(designation_name=new_val)
+        emp.designation = new_designation
         emp.save()
         return JsonResponse({'message': 'Employee designation updated successfully.'})
+    elif to_update == 'status':
+        if new_val in ['fired', 'terminated', 'resigned']:
+            if emp.employment_status == 'active':
+                emp.employment_status = new_val
+                emp.termination_date = date.today()
+                emp.save()
+                active_insurances = EmployeeInsurance.objects.filter(employee=emp, status='active')
+                active_insurances.update(status='inactive')
+                open_com = Complaint.objects.filter(employee=emp, status='open')
+                open_com.update(status='closed')
+                return JsonResponse({'message': 'Employee status updated successfully.'})
+            else:
+                return JsonResponse({'message': "Inactive employees can't be updated"})
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -448,14 +478,13 @@ def candidate_list_view(request):
 def hire_employee_view(request):
     data = json.loads(request.body)
     candidate_id = data.get('candidate_id')
-    password  = data.get('password')
     if not candidate_id:
         return JsonResponse({'message': 'No candidate ID provided.'}, status=400)
     candidate = InterviewedCandidate.objects.filter(id=candidate_id, status='shortlisted').first()
     if not candidate:
         return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
-    if(add_employee(candidate.full_name, candidate.email, candidate.phone, candidate.applied_position, candidate.department, password)):
-        candidate.delete()
+    if(add_employee(candidate.full_name, candidate.phone, candidate.applied_position, candidate.department)):
+        # candidate.delete()
         return JsonResponse({'message': 'Employee hired successfully.'})
     else:
         return JsonResponse({'message': 'Something went wrong.'}, status=404)

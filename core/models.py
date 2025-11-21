@@ -43,8 +43,8 @@ class Employee(models.Model):
         ('fired', 'Fired'),
     ]
 
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees')
-    designation = models.ForeignKey(Designation, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True, related_name='employees')
+    designation = models.ForeignKey(Designation, on_delete=models.CASCADE, null=True, blank=True, related_name='employees')
     full_name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True, null=True)

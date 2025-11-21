@@ -12,11 +12,11 @@ urlpatterns = [
     
     path('dashboard/', views.dashboard_view, name='dashboard'),
     
-    path('employees/all', views.employee_list_view, name='employee_list'),
-    path('employees/', views.employee_detail_view, name='employee_detail'),
-    path('employees/hire/', views.hire_employee_view, name='hire_employee'),
-    path('employees/<int:employee_id>/update/', views.update_employee, name='update_employee'),
-    path('employees/<int:employee_id>/delete/', views.delete_employee, name='delete_employee'),
+    path('employees/all/', views.employee_list_view, name='employee_list'), #working
+    path('employees/', views.employee_detail_view, name='employee_detail'), #working
+    path('employees/hire/', views.hire_employee_view, name='hire_employee'), #working
+    path('employees/<int:employee_id>/update/', views.update_employee, name='update_employee'), #working
+    path('employees/<int:employee_id>/delete/', views.delete_employee, name='delete_employee'), #working
     
     path('departments/', views.department_list_view, name='department_list'),
     path('departments/employees/', views.department_view, name='department'),
@@ -29,9 +29,9 @@ urlpatterns = [
     path('designations/<str:designation_name>/update/', views.update_designation, name='update_designation'),
     path('designations/<str:designation_name>/delete/', views.delete_designation, name='delete_designation'),
     
-    path('shortlisted-candidates/', views.shortlisted_candidate_list_view, name='shortlisted_candidate_list'),
-    path('interviewed-candidates/', views.candidate_list_view, name='interviewed_candidate_list'),
-    path('old-employee-records/', views.old_employee_records_view, name='old_employee_records'),
+    path('shortlisted-candidates/', views.shortlisted_candidate_list_view, name='shortlisted_candidate_list'), #working
+    path('interviewed-candidates/', views.candidate_list_view, name='interviewed_candidate_list'), #working
+    path('old-employee-records/', views.old_employee_records_view, name='old_employee_records'), #working
     
     path('payroll-generate/employee/', views.generate_payroll_view, name='generate_payroll'),
     path('payroll-history/', views.payroll_history_view, name='payroll_history'),
@@ -58,8 +58,8 @@ urlpatterns = [
     path('apply-insurance/<int:employee_id>/', views.apply_insurences, name='apply_insurances'),
     path('apply-leaves/<int:employee_id>/', views.apply_leaves, name='apply_leaves'),
     
-    path('complain/all/', views.all_complaints_view, name='all_complains'),
-    path('add_complain/', views.add_complaint_view, name='add_complain'),
-    path('complain/<int:complain_id>/delete/', views.delete_complain, name='delete_complain'),
-    path('complain/<int:complain_id>/update/', views.update_complain, name='update_complain'),
+    path('complain/all/', views.all_complaints_view, name='all_complains'), #working
+    path('add_complain/', views.add_complaint_view, name='add_complain'), #working
+    path('complain/<int:complain_id>/delete/', views.delete_complain, name='delete_complain'), #working
+    path('complain/<int:complain_id>/update/', views.update_complain, name='update_complain'), #working
 ]
