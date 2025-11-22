@@ -420,8 +420,7 @@ def employee_list_view(request):
 @permission_classes([AllowAny])
 @hr_required
 def employee_detail_view(request):
-    data = json.loads(request.body)
-    employee_id = data.get('employee_id')
+    employee_id = request.GET.get('employee_id')
     if not employee_id:
         return JsonResponse({'message': 'No employee ID provided.'}, status=400)
     employee = Employee.objects.filter(id=employee_id).first()
@@ -533,10 +532,9 @@ def hire_employee_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def reports_view(request):
-    data = json.loads(request.body)
-    doc_type = data.get('doc_type')
-    month = data.get('month')
-    year = data.get('year')
+    doc_type = request.GET.get('doc_type')
+    month = request.GET.get('month')
+    year = request.GET.get('year')
     if 'company_report' in doc_type and 'employee_report' in doc_type:
         if month and year:
             c_reports = MonthlyCompanyReport.objects.filter(month=month, year=year)
@@ -572,8 +570,7 @@ def reports_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def department_view(request):
-    data = json.loads(request.body)
-    department_name = data.get('department_name')
+    department_name = request.GET.get('department_name')
     if not department_name:
         return JsonResponse({'message': 'No department name provided.'}, status=400)
     department = Department.objects.filter(department_name=department_name).first()
@@ -773,11 +770,9 @@ def payroll_history_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def generate_report_view(request):
-    data = json.loads(request.body)
-
-    report_type = data.get("report_type")   # "employee" or "company"
-    month = int(data.get("month"))
-    year = int(data.get("year"))
+    report_type = request.GET.get("report_type")   # "employee" or "company"
+    month = int(request.GET.get("month"))
+    year = int(request.GET.get("year"))
 
     if report_type == "employee":
         return generate_employee_reports(month, year)
@@ -883,7 +878,7 @@ Complaints:
             employee=emp,
             month=month,
             year=year,
-            file_path=db_path
+            report_file=db_path
         )
 
         results.append({
@@ -1762,8 +1757,7 @@ def shortlist_or_reject(request):
 @hr_required
 @permission_classes([AllowAny])
 def allowed_roles(request):
-    data = json.loads(request.body)
-    d_id = data.get('department_id')
+    d_id = request.GET.get('department_id')
     if d_id:
         try:
             dep = Department.objects.filter(id=d_id).first()

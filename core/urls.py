@@ -38,9 +38,9 @@ urlpatterns = [
     path('report/', views.reports_view, name='reports'),
     
     path('leaves/all/', views.leave_list_view, name='leave_list'), #working
-    path('add_leave/', views.add_leave_view, name='add_leave'),
-    path('leaves/<int:leave_id>/update/', views.update_leave_status, name='update_leave_status'),
-    path('leaves/<int:leave_id>/delete/', views.delete_leave, name='delete_leave'),
+    path('add_leave/', views.add_leave_view, name='add_leave'), #working
+    # path('leaves/<int:leave_id>/update/', views.update_leave_status, name='update_leave_status'),
+    # path('leaves/<int:leave_id>/delete/', views.delete_leave, name='delete_leave'),
     path('leaves/employees/', views.employee_leave, name='employee_leaves'), #working
     
     path('attendance/view/', views.view_attendance_view, name='view_attendance'), #working 
@@ -50,15 +50,15 @@ urlpatterns = [
     
     path('insurance/all/', views.insurance_view, name='insurance'), #working
     path('add_insurance/', views.add_insurance_view, name='add_insurance'), #working
-    path('insurance/<int:insurance_id>/delete/', views.delete_insurance, name='delete_insurance'), #working
-    path('insurance/<int:insurance_id>/update/', views.update_insurance, name='update_insurance_status'), #working
+    # path('insurance/<int:insurance_id>/delete/', views.delete_insurance, name='delete_insurance'),
+    # path('insurance/<int:insurance_id>/update/', views.update_insurance, name='update_insurance_status'), 
     path('insurance/employees/', views.insured_employees_view, name='insured_employees'), #working
     #(employee <-> insurances)
     
     path('edit-insurances/<int:employee_id>/', views.edit_insurances_view, name='edit_insurances'), #working
     path('edit-leaves/<int:employee_id>/', views.edit_leaves_view, name='edit_leaves'), #working
     
-    path('apply-insurance/<int:employee_id>/', views.apply_insurences, name='apply_insurances'),
+    path('apply-insurance/<int:employee_id>/', views.apply_insurences, name='apply_insurances'), #working
     path('apply-leaves/<int:employee_id>/', views.apply_leaves, name='apply_leaves'), #working
     
     path('complain/all/', views.all_complaints_view, name='all_complains'), #working
@@ -66,7 +66,7 @@ urlpatterns = [
     path('complain/<int:complain_id>/delete/', views.delete_complain, name='delete_complain'), #working
     path('complain/<int:complain_id>/update/', views.update_complain, name='update_complain'), #working
     
-    path('add_candidate/', views.add_interviewed, name='add_interviewed'),
+    path('add_candidate/', views.add_interviewed, name='add_interviewed'), #working
     path('update_candidate/', views.shortlist_or_reject, name='update_candidates'), #working
     
     path('allowed-roles/', views.allowed_roles, name='allowed_roles') #working
