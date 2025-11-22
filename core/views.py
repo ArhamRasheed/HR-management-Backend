@@ -138,8 +138,9 @@ def update_employee(request, employee_id): #update
             return JsonResponse ({"message": "Invalid Designation"})
         new_designation = Designation.objects.get(designation_name=new_val)
         emp.designation = new_designation
-        if new_designation.designation_name == 'Manager' and emp.department.manager.employment_status in ['fired', 'terminated', 'resigned']:
-            emp.department.manager = emp
+        if new_designation.designation_name == 'Manager' :
+            if (emp.department.manager != None and emp.department.manager.employment_status in ['fired', 'terminated', 'resigned']) or (emp.department.manager == None):
+                emp.department.manager = emp           
         emp.save()
         return JsonResponse({'message': 'Employee designation updated successfully.'})
     elif to_update == 'status':
