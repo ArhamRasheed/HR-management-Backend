@@ -16,6 +16,7 @@ from django.utils import timezone
 from decimal import Decimal
 from django.contrib.auth.hashers import make_password
 from django.db.models import Count, Sum
+import random
 
 
 allowed_positions_for_departments = {
@@ -26,6 +27,32 @@ allowed_positions_for_departments = {
     'Marketing': ['Marketing Executive', 'Manager', 'CEO'],
 }
 
+salaries = {
+    'Software Engineer': 80000,
+    'CTO': 150000, 
+    'System Administrator' : 60000, 
+    'CEO': 2500000, 
+    'Manager': 100000,
+    'Recruiter': 40000,
+    'Accountant': 30000, 
+    'Financial Analyst': 120000,
+    'Sales Executive': 55000,
+    'Marketing Executive': 65000
+}
+
+def make_active_inactive():
+    active_plans = EmployeeInsurance.objects.filter(
+        end_date__lt=date.today(), 
+        status='active')
+    active_plans.update(status='inactive')
+    inactive_employee_plans = EmployeeInsurance.objects.exclude(
+        employee__employment_status='active'
+    )
+
+    inactive_employee_plans.update(status='inactive')
+    
+    
+
 def add_employee(full_name, phone, applied_position, department):
     if applied_position.designation_name == 'CEO':
         ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
@@ -34,6 +61,8 @@ def add_employee(full_name, phone, applied_position, department):
     if applied_position.designation_name == 'CTO' and (not department.department_name == 'IT' or Employee.objects.filter(designation__designation_name='CTO').exists()):
         return False
     if applied_position.designation_name not in allowed_positions_for_departments.get(department.department_name, []):
+        return False
+    if Employee.objects.get(email=full_name.replace(" ", "_").lower() + "@example.com").exists():
         return False
     if department.department_name == 'HR':
         pass_word = make_password(full_name.split()[0].lower())
@@ -47,9 +76,10 @@ def add_employee(full_name, phone, applied_position, department):
         department=department, 
         employment_status="active",
         designation=applied_position,
-        joining_date=timezone.now().date()
+        joining_date=timezone.now().date(),
+        basic_salary=salaries[applied_position.designation_name]
     )
-    if department.manager is None:
+    if (department.manager is None or department.manager.employment_status != 'active') and applied_position.designation_name == 'Manager':
         department.manager = employee
         department.manager_start_date = timezone.now().date()
         department.save()
@@ -108,6 +138,8 @@ def update_employee(request, employee_id): #update
             return JsonResponse ({"message": "Invalid Designation"})
         new_designation = Designation.objects.get(designation_name=new_val)
         emp.designation = new_designation
+        if new_designation.designation_name == 'Manager' and emp.department.manager.employment_status in ['fired', 'terminated', 'resigned']:
+            emp.department.manager = emp
         emp.save()
         return JsonResponse({'message': 'Employee designation updated successfully.'})
     elif to_update == 'status':
@@ -123,6 +155,14 @@ def update_employee(request, employee_id): #update
                 return JsonResponse({'message': 'Employee status updated successfully.'})
             else:
                 return JsonResponse({'message': "Inactive employees can't be updated"})
+    elif to_update == 'salary':
+        if Decimal(new_val) <= Decimal('0.00'):
+            return JsonResponse({'message': "Salary can't be less than or equal to 0"}, status=404)
+        if Decimal(new_val) < Decimal(salaries[emp.designation.designation_name]):
+            return JsonResponse({'message': "Minimum Salary is defined"}, status=404)
+        emp.basic_salary = new_val
+        emp.save()
+        return JsonResponse({'message': "Salary updated successfully"},status=200)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -137,12 +177,12 @@ def add_department(request):
     Department.objects.create(department_name=department_name)
     return JsonResponse({'message': 'Department added successfully.'})
 
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-@hr_required
-def delete_department(request, department_name):
-    Department.objects.filter(department_name=department_name).delete()
-    return JsonResponse({'message': 'Department deleted successfully.'})
+# @api_view(['DELETE'])
+# @permission_classes([AllowAny])
+# @hr_required
+# def delete_department(request, department_name):
+#     Department.objects.filter(department_name=department_name).delete()
+#     return JsonResponse({'message': 'Department deleted successfully.'})
 
 @api_view(['PUT', 'GET'])
 @permission_classes([AllowAny])
@@ -173,12 +213,12 @@ def update_department(request, department_name): #update
 #     return JsonResponse({'message': 'Designation added successfully.'})
 
 
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-@hr_required
-def delete_designation(request,designation_name):
-    Designation.objects.filter(designation_name=designation_name).delete()
-    return JsonResponse({'message': 'Designation deleted successfully.'})
+# @api_view(['DELETE'])
+# @permission_classes([AllowAny])
+# @hr_required
+# def delete_designation(request, designation_name):
+#     Designation.objects.filter(designation_name=designation_name).delete()
+#     return JsonResponse({'message': 'Designation deleted successfully.'})
 
 
 @api_view(['PUT', 'GET'])
@@ -304,6 +344,7 @@ def logout_view(request):
 @permission_classes([AllowAny])
 @hr_required
 def dashboard_view(request):
+    make_active_inactive()
     total_active_employees = Employee.objects.filter(employment_status="active").count()
 
     present_today = Attendance.objects.filter(status="present").count()
@@ -484,7 +525,7 @@ def hire_employee_view(request):
     if not candidate:
         return JsonResponse({'message': 'Candidate not found or not shortlisted.'}, status=404)
     if(add_employee(candidate.full_name, candidate.phone, candidate.applied_position, candidate.department)):
-        # candidate.delete()
+        candidate.delete()
         return JsonResponse({'message': 'Employee hired successfully.'})
     else:
         return JsonResponse({'message': 'Something went wrong.'}, status=404)
@@ -535,8 +576,8 @@ def department_view(request):
     department_name = data.get('department_name')
     if not department_name:
         return JsonResponse({'message': 'No department name provided.'}, status=400)
-    departemnt = Department.objects.filter(department_name=department_name).first()
-    if not departemnt:
+    department = Department.objects.filter(department_name=department_name).first()
+    if not department:
         return JsonResponse({'message': 'Department not found.'}, status=404)
     employees = [
             {
@@ -548,11 +589,11 @@ def department_view(request):
                 'joining_date': emp.joining_date,
                 'termination_date': emp.termination_date if emp.termination_date else 'N/A'
             }
-            for emp in Employee.objects.filter(department=departemnt, employment_status='active')   
+            for emp in Employee.objects.filter(department=department, employment_status='active')   
         ]
     return JsonResponse({
-        'department_name': departemnt.department_name,
-        'total_employees': Employee.objects.filter(department=departemnt).count(),
+        'department_name': department.department_name,
+        'total_employees': Employee.objects.filter(department=department).count(),
         'employees': employees
     })
 
@@ -592,36 +633,34 @@ def generate_payroll_view(request):
         
         absences = Attendance.objects.filter(
             employee=employee,
-            attendance_date__moth=month,
+            attendance_date__month=month,
             attendance_date__year=year,
             status='absent'
         )
         for absence in absences:
-            total_deductions += employee.basic_salary / 30
+            leave_exists = LeaveApplication.objects.filter(
+                employee=employee,
+                status='approved',
+                leave_type__is_paid=True,
+                start_date__lte=absence.attendance_date,
+                end_date__gte=absence.attendance_date
+            ).exists()
 
-        
-        leaves = LeaveApplication.objects.filter(
-            employee=employee,
-            start_date__month=month,
-            start_date__year=year,
-            approved=True,
-            paid=False
-        )
-        for leave in leaves:
-            total_deductions += employee.basic_salary / 30 * leave.days_count()
+            if leave_exists:
+                continue
+            total_deductions += employee.basic_salary / 30
 
         
         insurances = EmployeeInsurance.objects.filter(
             employee=employee,
             end_date__gte=date(year, month, 1),
-            paid=False
         )
         for insurance in insurances:
             total_deductions += insurance.monthly_deduction
 
         
         today = date.today()
-        tenure_years = max(0, today.year - employee.join_date.year - ((today.month, today.day) < (employee.join_date.month, employee.join_date.day)))
+        tenure_years = max(0, today.year - employee.joining_date.year - ((today.month, today.day) < (employee.joining_date.month, employee.joining_date.day)))
         bonus_percentage = min(tenure_years, 10)  # optional cap
         bonus = (employee.basic_salary * Decimal(bonus_percentage) / Decimal(100))
         attendances = Attendance.objects.filter(
@@ -701,32 +740,32 @@ def payroll_history_view(request):
 #     return JsonResponse({'message': 'Department added successfully.'})
 
 
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-def delete_department_view(request):
-    data = json.loads(request.body)
-    department_name = data.get('department_name')
-    if not department_name:
-        return JsonResponse({'message': 'No department name provided.'}, status=400)
-    deps = Department.objects.filter(department_name=department_name)
-    if not deps.exists():
-        return JsonResponse({'message': 'Department not found.'}, status=404)
-    delete_department(department_name)
-    return JsonResponse({'message': 'Department deleted successfully.'})
+# @api_view(['DELETE'])
+# @permission_classes([AllowAny])
+# def delete_department_view(request):
+#     data = json.loads(request.body)
+#     department_name = data.get('department_name')
+#     if not department_name:
+#         return JsonResponse({'message': 'No department name provided.'}, status=400)
+#     deps = Department.objects.filter(department_name=department_name)
+#     if not deps.exists():
+#         return JsonResponse({'message': 'Department not found.'}, status=404)
+#     delete_department(department_name)
+#     return JsonResponse({'message': 'Department deleted successfully.'})
 
-@api_view(['DELETE'])
-@permission_classes([AllowAny])
-@hr_required
-def delete_designation_view(request):
-    data = json.loads(request.body)
-    designation_name = data.get('designation_name')
-    if not designation_name:    
-        return JsonResponse({'message': 'No designation name provided.'}, status=400)
-    desigs = Designation.objects.filter(designation_name=designation_name)
-    if not desigs.exists():
-        return JsonResponse({'message': 'Designation not found.'}, status=404)
-    delete_designation(designation_name)
-    return JsonResponse({'message': 'Designation deleted successfully.'})
+# @api_view(['DELETE'])
+# @permission_classes([AllowAny])
+# @hr_required
+# def delete_designation_view(request):
+#     data = json.loads(request.body)
+#     designation_name = data.get('designation_name')
+#     if not designation_name:    
+#         return JsonResponse({'message': 'No designation name provided.'}, status=400)
+#     desigs = Designation.objects.filter(designation_name=designation_name)
+#     if not desigs.exists():
+#         return JsonResponse({'message': 'Designation not found.'}, status=404)
+#     delete_designation(designation_name)
+#     return JsonResponse({'message': 'Designation deleted successfully.'})
 
 
 @csrf_exempt
@@ -780,8 +819,8 @@ def generate_employee_reports(month, year):
         
         attendance = Attendance.objects.filter(
             employee=emp,
-            date__month=month,
-            date__year=year
+            attendance_date__month=month,
+            attendance_date__year=year
         )
         present_days = attendance.filter(status="present").count()
         absent_days = attendance.filter(status="absent").count()
@@ -876,14 +915,14 @@ def generate_company_report(month, year):
     total_employees = Employee.objects.filter(employment_status='active').count()
 
     presents = Attendance.objects.filter(
-        date__month=month,
-        date__year=year,
+        attendance_date__month=month,
+        attendance_date__year=year,
         status="present"
     ).count()
 
     absents = Attendance.objects.filter(
-        date__month=month,
-        date__year=year,
+        attendance_date__month=month,
+        attendance_date__year=year,
         status="absent"
     ).count()
 
@@ -996,12 +1035,7 @@ def update_leave_status(request, leave_type_name):
     new_val = data.get('new_val')
     if not to_update or not new_val:
         return JsonResponse({'message': 'All Parameters are not provided'}, status=400)
-    if to_update == 'leave_type_name':
-        if LeaveType.objects.filter(leave_type_name=new_val).exists():
-            return JsonResponse({'message': 'Leave type already exists.'}, status=400)
-        LeaveType.objects.filter(leave_type_name=leave_type_name).update(leave_type_name=new_val)
-        return JsonResponse ({'message': 'Leave type name updated successfully.'})
-    elif to_update == 'description':
+    if to_update == 'description':
         LeaveType.objects.filter(leave_type_name=leave_type_name).update(description=new_val)
         return JsonResponse ({'message': 'Leave type description updated successfully.'})
     elif to_update == 'max_days_allowed':
@@ -1033,6 +1067,8 @@ def insured_employees_view(request):
             {
                 "employee_id": ei.employee.id,
                 "employee_name": ei.employee.full_name,
+                "insurance_id": ei.insurance_plan.id,
+                "insurance_name": ei.insurance_plan.plan_name,
                 "status": ei.status,
                 "start_date": ei.start_date,
                 "end_date": ei.end_date,
@@ -1077,7 +1113,8 @@ def insurance_view(request):
             'id': insurance.id,
             'plan_name': insurance.plan_name,
             'coverage': str(insurance.coverage_amount),  # include any other fields you want
-            'premium': str(insurance.premium_amount)  # convert Decimal to string for JSON
+            'premium': str(insurance.premium_amount),  # convert Decimal to string for JSON
+            'policy terms' : insurance.policy_terms
         }
         for insurance in insurances
     ]
@@ -1085,7 +1122,7 @@ def insurance_view(request):
 
 
 @hr_required
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
 @csrf_exempt
 def add_insurance_view(request):
@@ -1095,16 +1132,16 @@ def add_insurance_view(request):
             plan_name = data.get("plan_name")
             coverage = data.get("coverage")
             premium = data.get("premium")
-            policy_term = data.get("policy_term")  # new field
+            policy_term = data.get("policy_terms")  # new field
 
             if not plan_name or not coverage or premium is None or policy_term is None:
                 return JsonResponse({"error": "Missing required fields"}, status=400)
 
             insurance = InsurancePlan.objects.create(
                 plan_name=plan_name,
-                coverage=coverage,
-                premium=premium,
-                policy_term=policy_term
+                coverage_amount=coverage,
+                premium_amount=premium,
+                policy_terms=policy_term
             )
 
             return JsonResponse({
@@ -1190,19 +1227,10 @@ def employee_leave(request):
     result = [
         {
             'id': la.id,
-            'employee': {
-                'id': la.employee.id,
-                'full_name': la.employee.full_name,
-                'email': la.employee.email,
-                'department': la.employee.department.department_name if la.employee.department else None,
-                'designation': la.employee.designation.designation_name if la.employee.designation else None,
-            },
-            'leave_type': {
-                'id': la.leave_type.id,
-                'leave_type_name': la.leave_type.leave_type_name,
-                'description': la.leave_type.policy_description,
-                'max_days_allowed': la.leave_type.max_days_per_year,
-            },
+            'employee_id': la.employee.id,
+            'full_name': la.employee.full_name,           
+            'leave_id': la.leave_type.id,
+            'leave_type_name': la.leave_type.leave_type_name,
             'start_date': la.start_date,
             'end_date': la.end_date,
             'total_days': la.total_days,
@@ -1228,7 +1256,7 @@ def edit_insurances_view(request, employee_id):
     extend_end_date = data.get("extend_end_date")  # YYYY-MM-DD
     deduction = data.get('new_deduction')
     try:
-        employee = Employee.objects.get(id=employee_id)
+        employee = Employee.objects.get(id=employee_id, employment_status="active")
     except Employee.DoesNotExist:
         return JsonResponse({"message": "Invalid Employee"}, status=404)
 
@@ -1239,28 +1267,27 @@ def edit_insurances_view(request, employee_id):
         emp_ins = EmployeeInsurance.objects.get(employee=employee, insurance_plan_id=insurance_id)
     except EmployeeInsurance.DoesNotExist:
         return JsonResponse({"message": "Insurance record not found for this employee"}, status=404)
+    try:
+        if new_status:
+            if new_status not in ["active", "inactive"]:
+                return JsonResponse({"message": "Status must be 'active' or 'inactive'"}, status=400)
+            emp_ins.status = new_status
 
-    if new_status:
-        if new_status not in ["active", "inactive"]:
-            return JsonResponse({"message": "Status must be 'active' or 'inactive'"}, status=400)
-        emp_ins.status = new_status
+        if extend_end_date:
+            try:
+                new_end_date = datetime.strptime(extend_end_date, "%Y-%m-%d").date()
+            except:
+                return JsonResponse({"message": "Invalid date format. Use YYYY-MM-DD"}, status=400)
 
-    if extend_end_date:
-        try:
-            new_end_date = datetime.strptime(extend_end_date, "%Y-%m-%d").date()
-        except:
-            return JsonResponse({"message": "Invalid date format. Use YYYY-MM-DD"}, status=400)
+            if new_end_date < emp_ins.end_date:
+                return JsonResponse({"message": "New end date cannot be earlier than existing end date"}, status=400)
+            emp_ins.end_date = new_end_date
 
-        if new_end_date < emp_ins.end_date:
-            return JsonResponse({"message": "New end date cannot be earlier than existing end date"}, status=400)
-        emp_ins.end_date = new_end_date
-
-        if deduction and deduction > Decimal('0.00'):
+        if deduction and Decimal(deduction) > Decimal('0.00'):
             emp_ins.monthly_deduction = Decimal(deduction)
 
-    emp_ins.save()
-
-    return JsonResponse({
+        emp_ins.save()
+        return JsonResponse({
         "message": "Insurance updated successfully",
         "insurance_record": {
             "id": emp_ins.id,
@@ -1271,6 +1298,10 @@ def edit_insurances_view(request, employee_id):
             "end_date": emp_ins.end_date,
         }
     }, status=200)
+    except:
+        return JsonResponse ({}, status=501)
+
+    
 
     
     
@@ -1284,15 +1315,15 @@ def mark_attendance(request, employee_id):
     except:
         return JsonResponse({"message": "Invalid JSON"}, status=400)
 
-    date = data.get('attendance_date')
+    att_date_str = data.get('attendance_date')
     check_in_time = data.get('check_in_time')
     check_out_time = data.get('check_out_time')
     status = data.get('status')
 
-    if not date:
+    if not att_date_str:
         return JsonResponse({'message': "Attendance date is required"}, status=400)
     try:
-        att_date = datetime.strptime(date, "%Y-%m-%d").date()
+        att_date = datetime.strptime(att_date_str, "%Y-%m-%d").date()
     except ValueError:
         return JsonResponse({'message': "Invalid date format, use YYYY-MM-DD"}, status=400)
 
@@ -1301,22 +1332,26 @@ def mark_attendance(request, employee_id):
     
     if status == 'present' and (not check_in_time or not check_out_time):
         return JsonResponse({'message': "Check-in and Check-out time required for present status"}, status=400)
-
+    try:
+        check_in_time = datetime.strptime(check_in_time, "%H:%M:%S").time()
+        check_out_time = datetime.strptime(check_out_time, "%H:%M:%S").time()
+    except:
+        return JsonResponse({'message': "Invalid time format, use HH:MM:SS"}, status=400)
     
     try:
-        emp = Employee.objects.get(employee_id=employee_id)
+        emp = Employee.objects.get(id=employee_id, employment_status = 'active')
     except Employee.DoesNotExist:
         return JsonResponse({'message': "Employee not found"}, status=404)
 
     
-    existing_attendance = Attendance.objects.filter(employee=emp, attendance_date=date).first()
+    existing_attendance = Attendance.objects.filter(employee=emp, attendance_date=att_date).first()
     if existing_attendance:
         return JsonResponse({'message': "Attendance already marked for this date"}, status=409)
 
     
     att = Attendance.objects.create(
         employee=emp,
-        attendance_date=date,
+        attendance_date=att_date,
         check_in_time=check_in_time if status == "present" else None,
         check_out_time=check_out_time if status == "present" else None,
         status=status
@@ -1326,7 +1361,7 @@ def mark_attendance(request, employee_id):
         "message": "Attendance marked successfully",
         "attendance": {
             "id": att.id,
-            "employee_id": emp.employee_id,
+            "employee_id": emp.id,
             "employee_name": emp.full_name,
             "date": att.attendance_date,
             "check_in": att.check_in_time,
@@ -1347,9 +1382,8 @@ def edit_leaves_view(request, employee_id):
 
     data = json.loads(request.body)
 
-    leave_id = data.get("leave_id")
+    leave_id = data.get("leave_application_id")
     new_status = data.get("status")
-    is_paid = data.get("is_paid")
 
     if not leave_id:
         return JsonResponse({"message": "leave_id is required"}, status=400)
@@ -1366,18 +1400,24 @@ def edit_leaves_view(request, employee_id):
         }, status=400)
 
     if new_status:
-        if new_status not in ["pending", "approved", "rejected"]:
+        if new_status not in ["approved", "rejected"]:
             return JsonResponse({"message": "Invalid status"}, status=400)
+        if new_status == "approved":
+            approved_days = LeaveApplication.objects.filter(
+                employee=employee,
+                leave_type=leave_record.leave_type,
+                status="approved",
+                start_date__year=date.today().year
+            ).aggregate(total_days=Sum('total_days'))['total_days'] or 0
+            if approved_days + leave_record.total_days > leave_record.leave_type.max_days_per_year:
+                leave_record.status = "rejected"
+                leave_record.save()
+                return JsonResponse({
+                    "message": f"Leave exceeds allowed {leave_record.leave_type.max_days_per_year} days per year. Leave automatically rejected."
+                }, status=200)
+
         leave_record.status = new_status
-
-
-    if is_paid is not None:
-        if type(is_paid) is not bool:
-            return JsonResponse({"message": "is_paid must be true or false"}, status=400)
-        leave_record.is_paid = is_paid
-
-    leave_record.save()
-
+        leave_record.save()
     return JsonResponse({
         "message": "Leave updated successfully",
         "leave": {
@@ -1386,7 +1426,7 @@ def edit_leaves_view(request, employee_id):
             "start_date": leave_record.start_date,
             "end_date": leave_record.end_date,
             "status": leave_record.status,
-            "is_paid": leave_record.is_paid
+            "is_paid": leave_record.leave_type.is_paid
         }
     }, status=200)
 
@@ -1433,7 +1473,7 @@ def apply_insurences(request, employee_id):
         status="active",
         start_date=today,
         end_date=end_date,
-        deduction=deduction
+        monthly_deduction=deduction
     )
 
     return JsonResponse({
@@ -1454,7 +1494,7 @@ def apply_insurences(request, employee_id):
 @permission_classes([AllowAny])
 def apply_leaves(request, employee_id):
     try:
-        employee = Employee.objects.get(id=employee_id)
+        employee = Employee.objects.get(id=employee_id, employment_status='active')
     except Employee.DoesNotExist:
         return JsonResponse({"message": "Invalid Employee"}, status=404)
 
@@ -1496,13 +1536,17 @@ def apply_leaves(request, employee_id):
     if overlapping:
         return JsonResponse({"message": "This leave overlaps with an existing request"}, status=409)
     
+    le = LeaveType.objects.filter(leave_type_name__iexact=leave_type)
+    if not le.exists():
+        return JsonResponse ({'message': 'Leave Type not found'})
+    
     leave = LeaveApplication.objects.create(
         employee=employee,
-        leave_type=leave_type,
+        leave_type=le.first(),
         start_date=s_date,
         end_date=e_date,
-        status="pending",
-        is_paid=is_paid
+        total_days=(e_date - s_date).days + 1,
+        status="pending"
     )
 
     return JsonResponse({
@@ -1510,11 +1554,11 @@ def apply_leaves(request, employee_id):
         "leave": {
             "id": leave.id,
             "employee": employee.full_name,
-            "leave_type": leave.leave_type,
-            "start_date": leave.start_date,
-            "end_date": leave.end_date,
+            "leave_type": leave.leave_type.leave_type_name,
+            "start_date": str(leave.start_date),
+            "end_date": str(leave.end_date),
             "status": leave.status,
-            "is_paid": leave.is_paid
+            "is_paid": leave.leave_type.is_paid
         }
     }, status=201)
 
@@ -1563,7 +1607,7 @@ def add_complaint_view(request):
         employee=employee,
         subject=title,
         description=description,
-        status="pending"   
+        status="open"   
     )
 
     return JsonResponse({
@@ -1627,3 +1671,107 @@ def update_complain(request, complain_id):
         'new_status': new_status
     }, status=200)
 
+@api_view(['POST'])
+@csrf_exempt
+@hr_required
+@permission_classes([AllowAny])
+def add_interviewed(request):
+    try:
+        data = json.loads(request.body)
+
+        full_name = data.get("full_name")
+        email = data.get("email")
+        phone = data.get("phone")
+        department_id = data.get("department_id")
+        position_id = data.get("position_id")
+        # interviewer_id = data.get("interviewer_id")
+        remarks = data.get("remarks", "")
+
+        if not full_name or not email:
+            return JsonResponse({"message": "Full name and email are required"}, status=400)
+        
+        department = None
+        if department_id:
+            department = Department.objects.filter(id=department_id).first()
+            if not department:
+                return JsonResponse({"message": "Invalid department"}, status=400)
+
+        
+        position = None
+        if position_id:
+            position = Designation.objects.filter(id=position_id).first()
+            if not position:
+                return JsonResponse({"message": "Invalid applied position"}, status=400)
+
+        
+        interviewer = None
+        interviewers = Employee.objects.filter(
+            department__id=department_id, 
+            employment_status='active')
+        if interviewers.exists():
+            interviewer = random.choice(list(interviewers))
+        else:
+            interviewers = Employee.objects.filter(
+            department__department_name='HR', 
+            employment_status='active')
+            if interviewers.exists():
+                interviewer = random.choice(list(interviewers))
+        
+
+        today = timezone.now().date()
+
+        candidate = InterviewedCandidate.objects.create(
+            full_name=full_name,
+            email=email,
+            phone=phone,
+            department=department,
+            applied_position=position,
+            interviewer=interviewer,
+            interview_date=today,
+            remarks=remarks,
+        )
+
+        return JsonResponse({
+            "message": "Interviewed candidate created successfully",
+            "candidate_id": candidate.id
+        }, status=201)
+
+    except Exception as e:
+        return JsonResponse({"message": str(e)}, status=500)
+    
+@api_view(['PUT', 'GET'])
+@hr_required
+@permission_classes([AllowAny])
+def shortlist_or_reject(request):
+    data = json.loads(request.body)
+    c_id = data.get('candidate_id')
+    new = data.get('status')
+    if c_id and new:
+        try:
+            can = InterviewedCandidate.objects.filter(id=c_id).first()
+        except Exception as e:
+            return JsonResponse ({'message': f"{e}"}, status=404)
+        if can.status == 'pending' and new in ["shortlisted", "rejected"]:
+            can.status = new
+            can.save()
+            return JsonResponse({'message': f"candidate updated with new status: {new}"}, status=200)
+        return JsonResponse ({'message': f"candidate is already {can.status}"}, status=404)
+    return JsonResponse ({'message': "Parameters not found"}, status=404)
+
+@api_view(['GET'])
+@hr_required
+@permission_classes([AllowAny])
+def allowed_roles(request):
+    data = json.loads(request.body)
+    d_id = data.get('department_id')
+    if d_id:
+        try:
+            dep = Department.objects.filter(id=d_id).first()
+        except Exception as e:
+            return JsonResponse ({'message': f"{e}"}, status=404)
+        return JsonResponse ({'designations': list(allowed_positions_for_departments[dep.department_name])}, status=200)
+    return JsonResponse (
+        {
+            'message': "department id is needed"
+        }, status=400
+    )

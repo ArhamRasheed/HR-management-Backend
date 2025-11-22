@@ -37,29 +37,37 @@ urlpatterns = [
     path('payroll-history/', views.payroll_history_view, name='payroll_history'),
     path('report/', views.reports_view, name='reports'),
     
-    path('leaves/all', views.leave_list_view, name='leave_list'),
+    path('leaves/all/', views.leave_list_view, name='leave_list'), #working
     path('add_leave/', views.add_leave_view, name='add_leave'),
     path('leaves/<int:leave_id>/update/', views.update_leave_status, name='update_leave_status'),
     path('leaves/<int:leave_id>/delete/', views.delete_leave, name='delete_leave'),
-    path('leaves/employees', views.employee_leave, name='employee_leaves'),
+    path('leaves/employees/', views.employee_leave, name='employee_leaves'), #working
     
-    path('attendance/view/', views.view_attendance_view, name='view_attendance'),
-    path('attendance/mark/<int:employee_id>/', views.mark_attendance, name='mark_attendance'),
+    path('attendance/view/', views.view_attendance_view, name='view_attendance'), #working 
+    # -> date range ka filter front pe lgana hai 
+    path('attendance/mark/<int:employee_id>/', views.mark_attendance, name='mark_attendance'), #working
+    # (request mein format YYYY-MM-DD, date ka HH:MM:SS) 
     
-    path('insurance/all/', views.insurance_view, name='insurance'),
-    path('add_insurance/', views.add_insurance_view, name='add_insurance'),
-    path('insurance/<int:insurance_id>/delete/', views.delete_insurance, name='delete_leave'),
-    path('insurance/<int:insurance_id>/update/', views.update_insurance, name='update_leave_status'),
-    path('insurance/employees/', views.insured_employees_view, name='insured_employees'),
+    path('insurance/all/', views.insurance_view, name='insurance'), #working
+    path('add_insurance/', views.add_insurance_view, name='add_insurance'), #working
+    path('insurance/<int:insurance_id>/delete/', views.delete_insurance, name='delete_insurance'), #working
+    path('insurance/<int:insurance_id>/update/', views.update_insurance, name='update_insurance_status'), #working
+    path('insurance/employees/', views.insured_employees_view, name='insured_employees'), #working
+    #(employee <-> insurances)
     
-    path('edit-insurances/<int:employee_id>/', views.edit_insurances_view, name='edit_insurances'),
-    path('edit-leaves/<int:employee_id>/', views.edit_leaves_view, name='edit_leaves'),
+    path('edit-insurances/<int:employee_id>/', views.edit_insurances_view, name='edit_insurances'), #working
+    path('edit-leaves/<int:employee_id>/', views.edit_leaves_view, name='edit_leaves'), #working
     
     path('apply-insurance/<int:employee_id>/', views.apply_insurences, name='apply_insurances'),
-    path('apply-leaves/<int:employee_id>/', views.apply_leaves, name='apply_leaves'),
+    path('apply-leaves/<int:employee_id>/', views.apply_leaves, name='apply_leaves'), #working
     
     path('complain/all/', views.all_complaints_view, name='all_complains'), #working
     path('add_complain/', views.add_complaint_view, name='add_complain'), #working
     path('complain/<int:complain_id>/delete/', views.delete_complain, name='delete_complain'), #working
     path('complain/<int:complain_id>/update/', views.update_complain, name='update_complain'), #working
+    
+    path('add_candidate/', views.add_interviewed, name='add_interviewed'),
+    path('update_candidate/', views.shortlist_or_reject, name='update_candidates'), #working
+    
+    path('allowed-roles/', views.allowed_roles, name='allowed_roles') #working
 ]

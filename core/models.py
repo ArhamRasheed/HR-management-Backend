@@ -52,7 +52,8 @@ class Employee(models.Model):
     joining_date = models.DateField()
     termination_date = models.DateField(null=True, blank=True)
     employment_status = models.CharField(max_length=20, choices=EMPLOYMENT_STATUS_CHOICES, default='active')
-
+    basic_salary = models.DecimalField(max_digits=15, decimal_places=2)
+    
     class Meta:
         db_table = 'employees'
         ordering = ['full_name']
@@ -176,7 +177,6 @@ class Payroll(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payrolls')
     month = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
     year = models.IntegerField()
-    basic_salary = models.DecimalField(max_digits=15, decimal_places=2)
     bonuses = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     bonus_reason = models.TextField(blank=True, null=True)
     deductions = models.DecimalField(max_digits=15, decimal_places=2, default=0)
@@ -200,7 +200,7 @@ class Payroll(models.Model):
 
     def calculate_net_salary(self):
         """Calculate net salary: basic + bonuses - deductions"""
-        self.net_salary = self.basic_salary + self.bonuses - self.deductions
+        self.net_salary = self.employee.basic_salary + self.bonuses - self.deductions
         return self.net_salary
 
 
@@ -208,8 +208,7 @@ class Attendance(models.Model):
     STATUS_CHOICES = [
         ('present', 'Present'),
         ('absent', 'Absent'),
-        ('late', 'Late'),
-        ('on_leave', 'On Leave'),
+        ('late', 'Late')
     ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attendances')
