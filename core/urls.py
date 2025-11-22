@@ -18,16 +18,16 @@ urlpatterns = [
     path('employees/<int:employee_id>/update/', views.update_employee, name='update_employee'), #working
     path('employees/<int:employee_id>/delete/', views.delete_employee, name='delete_employee'), #working
     
-    path('departments/', views.department_list_view, name='department_list'),
-    path('departments/employees/', views.department_view, name='department'),
-    path('add_department/', views.add_department_view, name='add_department'),
+    path('departments/', views.department_list_view, name='department_list'), #working
+    path('departments/employees/', views.department_view, name='department'), #working
+    #path('add_department/', views.add_department_view, name='add_department'), implemented hai use case nhi hai
     path('departments/<str:department_name>/update/', views.update_department, name='update_department'),
-    path('departments/<str:department_name>/delete/', views.delete_department, name='delete_department'),
+    #path('departments/<str:department_name>/delete/', views.delete_department, name='delete_department'), implemented hai use case nhi hai
     
     path('designations/', views.designation_list_view, name='designation_list'),
-    path('add_designation/', views.add_designation, name='add_designation'),
+    #path('add_designation/', views.add_designation, name='add_designation'), implemented hai use case nhi hai
     path('designations/<str:designation_name>/update/', views.update_designation, name='update_designation'),
-    path('designations/<str:designation_name>/delete/', views.delete_designation, name='delete_designation'),
+    # path('designations/<str:designation_name>/delete/', views.delete_designation, name='delete_designation'), implemented hai use case nhi hai
     
     path('shortlisted-candidates/', views.shortlisted_candidate_list_view, name='shortlisted_candidate_list'), #working
     path('interviewed-candidates/', views.candidate_list_view, name='interviewed_candidate_list'), #working

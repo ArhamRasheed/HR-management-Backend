@@ -159,18 +159,18 @@ def update_department(request, department_name): #update
         dep.save()
         return JsonResponse ({'message': 'Department name updated successfully.'})
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@hr_required
-def add_designation(request):
-    data = json.loads(request.body)
-    designation_name = data.get('designation_name')
-    if not designation_name:
-        return JsonResponse({'message': 'No designation name provided.'}, status=400)
-    if Designation.objects.filter(designation_name=designation_name).exists():
-        return JsonResponse({'message': 'Designation already exists.'}, status=400)
-    Designation.objects.create(designation_name=designation_name)
-    return JsonResponse({'message': 'Designation added successfully.'})
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# @hr_required
+# def add_designation(request):
+#     data = json.loads(request.body)
+#     designation_name = data.get('designation_name')
+#     if not designation_name:
+#         return JsonResponse({'message': 'No designation name provided.'}, status=400)
+#     if Designation.objects.filter(designation_name=designation_name).exists():
+#         return JsonResponse({'message': 'Designation already exists.'}, status=400)
+#     Designation.objects.create(designation_name=designation_name)
+#     return JsonResponse({'message': 'Designation added successfully.'})
 
 
 @api_view(['DELETE'])
@@ -548,7 +548,7 @@ def department_view(request):
                 'joining_date': emp.joining_date,
                 'termination_date': emp.termination_date if emp.termination_date else 'N/A'
             }
-            for emp in Employee.objects.filter(department=departemnt)   
+            for emp in Employee.objects.filter(department=departemnt, employment_status='active')   
         ]
     return JsonResponse({
         'department_name': departemnt.department_name,
@@ -687,31 +687,19 @@ def payroll_history_view(request):
     return JsonResponse ({"Payrolls" : payroll_data})
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def add_department_view(request):
-    data = json.loads(request.body)
-    department_name = data.get('department_name')
-    if not department_name:
-        return JsonResponse({'message': 'No department name provided.'}, status=400)
-    deps = Department.objects.filter(department_name=department_name)
-    if deps.exists():
-        return JsonResponse({'message': 'Department already exists.'}, status=400)
-    add_department(department_name)
-    return JsonResponse({'message': 'Department added successfully.'})
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def add_department_view(request):
+#     data = json.loads(request.body)
+#     department_name = data.get('department_name')
+#     if not department_name:
+#         return JsonResponse({'message': 'No department name provided.'}, status=400)
+#     deps = Department.objects.filter(department_name=department_name)
+#     if deps.exists():
+#         return JsonResponse({'message': 'Department already exists.'}, status=400)
+#     add_department(department_name)
+#     return JsonResponse({'message': 'Department added successfully.'})
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def add_designation_view(request):
-    data = json.loads(request.body)
-    designation_name = data.get('designation_name')
-    if not designation_name:
-        return JsonResponse({'message': 'No designation name provided.'}, status=400)
-    desigs = Designation.objects.filter(designation_name=designation_name)
-    if desigs.exists():
-        return JsonResponse({'message': 'Designation already exists.'}, status=400)
-    add_designation(designation_name)
-    return JsonResponse({'message': 'Designation added successfully.'})
 
 @api_view(['DELETE'])
 @permission_classes([AllowAny])
