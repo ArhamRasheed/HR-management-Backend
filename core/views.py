@@ -54,35 +54,47 @@ def make_active_inactive():
     
 
 def add_employee(full_name, phone, applied_position, department):
+
+    
     if applied_position.designation_name == 'CEO':
-        ceos = Employee.objects.filter(designation__designation_name='CEO', employment_status='active')
-        if ceos.exists():
+        if Employee.objects.filter(designation__designation_name='CEO', employment_status='active').exists():
             return False
-    if applied_position.designation_name == 'CTO' and (not department.department_name == 'IT' or Employee.objects.filter(designation__designation_name='CTO').exists()):
-        return False
+    if applied_position.designation_name == 'CTO':
+        if department.department_name != 'IT':
+            return False
+        if Employee.objects.filter(designation__designation_name='CTO', employment_status='active').exists():
+            return False
+
     if applied_position.designation_name not in allowed_positions_for_departments.get(department.department_name, []):
         return False
-    if Employee.objects.get(email=full_name.replace(" ", "_").lower() + "@example.com").exists():
+
+    email = full_name.replace(" ", "_").replace("-", "_").lower() + "@example.com"
+    if Employee.objects.filter(email=email).exists():
         return False
+
     if department.department_name == 'HR':
         pass_word = make_password(full_name.split()[0].lower())
     else:
         pass_word = None
+
+    # Create employee
     employee = Employee.objects.create(
-        full_name=full_name, 
-        email=full_name.replace(" ", "_").lower() + "@example.com",
-        phone=phone, 
+        full_name=full_name,
+        email=email,
+        phone=phone,
         password_hash=pass_word,
-        department=department, 
+        department=department,
         employment_status="active",
         designation=applied_position,
         joining_date=timezone.now().date(),
         basic_salary=salaries[applied_position.designation_name]
     )
+
     if (department.manager is None or department.manager.employment_status != 'active') and applied_position.designation_name == 'Manager':
         department.manager = employee
         department.manager_start_date = timezone.now().date()
         department.save()
+
     return True
 
 @api_view(['DELETE'])
