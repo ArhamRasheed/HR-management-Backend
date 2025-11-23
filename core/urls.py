@@ -26,7 +26,7 @@ urlpatterns = [
     
     path('designations/', views.designation_list_view, name='designation_list'),
     #path('add_designation/', views.add_designation, name='add_designation'), implemented hai use case nhi hai
-    path('designations/<str:designation_name>/update/', views.update_designation, name='update_designation'),
+    #path('designations/<str:designation_name>/update/', views.update_designation, name='update_designation'),
     # path('designations/<str:designation_name>/delete/', views.delete_designation, name='delete_designation'), implemented hai use case nhi hai
     
     path('shortlisted-candidates/', views.shortlisted_candidate_list_view, name='shortlisted_candidate_list'), #working
@@ -36,6 +36,7 @@ urlpatterns = [
     path('payroll-generate/employee/', views.generate_payroll_view, name='generate_payroll'),
     path('payroll-history/', views.payroll_history_view, name='payroll_history'),
     path('report/', views.reports_view, name='reports'),
+    path('add_report/', views.generate_report_view, name='generate_reports'),
     
     path('leaves/all/', views.leave_list_view, name='leave_list'), #working
     path('add_leave/', views.add_leave_view, name='add_leave'), #working
@@ -45,7 +46,7 @@ urlpatterns = [
     
     path('attendance/view/', views.view_attendance_view, name='view_attendance'), #working 
     # -> date range ka filter front pe lgana hai 
-    path('attendance/mark/<int:employee_id>/', views.mark_attendance, name='mark_attendance'), #working
+    #path('attendance/mark/<int:employee_id>/', views.mark_attendance, name='mark_attendance'), #working
     # (request mein format YYYY-MM-DD, date ka HH:MM:SS) 
     
     path('insurance/all/', views.insurance_view, name='insurance'), #working
