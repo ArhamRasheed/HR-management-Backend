@@ -1129,6 +1129,7 @@ def add_leave_view(request):
     leave_type_name = data.get('leave_type_name')
     description = data.get('description')
     max_days_per_year = data.get('max_days_allowed')
+    is_paid = data.get('is_paid')
     if not leave_type_name:
         return JsonResponse({'message': 'No leave type name provided.'}, status=400)
     leaves = LeaveType.objects.filter(leave_type_name=leave_type_name)
@@ -1137,7 +1138,8 @@ def add_leave_view(request):
     LeaveType.objects.create(
         leave_type_name=leave_type_name,
         description=description,
-        max_days_per_year=max_days_per_year
+        max_days_per_year=max_days_per_year,
+        is_paid=is_paid
     )
     return JsonResponse({'message': 'Leave type added successfully.'})
 
