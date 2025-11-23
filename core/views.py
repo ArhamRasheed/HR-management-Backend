@@ -461,7 +461,7 @@ def dashboard_view(request):
             "total_departments": total_departments,
             "employees_per_department": dept_emp_list,
             "pending_leaves": pending_leaves,
-            "total_payroll": float(total_payroll)
+            "total_payroll": float(total_payroll),
         }, status=200)
     except Exception as e:
         return JsonResponse ({'message': f"{e}"})
@@ -884,33 +884,35 @@ def payroll_history_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def generate_report_view(request):
-    report_type = request.GET.get("report_type")   # "employee" or "company"
-    month = int(request.GET.get("month"))
-    year = int(request.GET.get("year"))
+    try:
+        report_type = request.GET.get("report_type")   # "employee" or "company"
+        month = int(request.GET.get("month"))
+        year = int(request.GET.get("year"))
+        if report_type == "employee":
+            return generate_employee_reports(month, year)
 
-    if report_type == "employee":
-        return generate_employee_reports(month, year)
+        elif report_type == "company":
+            return generate_company_report(month, year)
 
-    elif report_type == "company":
-        return generate_company_report(month, year)
+        return JsonResponse({"error": "Invalid report_type"}, status=400)
+    except Exception as e:
+        return JsonResponse ({'message': f"{e}"}, status=500)
 
-    return JsonResponse({"error": "Invalid report_type"}, status=400)
-
-@csrf_exempt
-@hr_required
-@api_view(['GET'])
-@permission_classes([AllowAny])
 def generate_employee_reports(month, year):
 
-    employees = Employee.objects.all()
+    employees = Employee.objects.filter(employment_status="active")
     results = []
 
     base_folder = os.path.join(settings.MEDIA_ROOT, "employee_reports")
     os.makedirs(base_folder, exist_ok=True)
 
     for emp in employees:
-
-        
+        if MonthlyEmployeeReport.objects.filter(employee=emp, month=month, year=year).exists():
+            MonthlyEmployeeReport.objects.filter(employee=emp, month=month, year=year).delete()
+        payroll_status = "Pending"
+        p = Payroll.objects.filter(status='paid', month=month, year=year, employee=emp)
+        if p.exists():
+            payroll_status = "Paid"
         exists = MonthlyEmployeeReport.objects.filter(
             employee=emp,
             month=month,
@@ -976,10 +978,12 @@ Complaints:
   Total: {total_comp}
   Resolved: {resolved_comp}
   Unresolved: {unresolved_comp}
+  
+Payroll for {month}, {year}: {payroll_status}
 """
 
         
-        file_name = f"employee_{emp.id}_{month}_{year}.txt"
+        file_name = f"employee_{emp.full_name}_{month}_{year}.txt"
         file_path = os.path.join(base_folder, file_name)
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -1003,9 +1007,7 @@ Complaints:
 
     return JsonResponse({"status": "success", "employee_reports": results})
 
-@csrf_exempt
-@hr_required
-@api_view(['GET'])
+
 @permission_classes([AllowAny])
 def generate_company_report(month, year):
 
@@ -1017,7 +1019,7 @@ def generate_company_report(month, year):
     if exists:
         return JsonResponse({
             "status": "already_exists",
-            "file_path": exists.file_path
+            "file_path": exists.report_file
         })
 
     #
@@ -1057,7 +1059,7 @@ Company Monthly Report
 
 Month: {month}-{year}
 
-Total Employees: {total_employees}
+Total Active Employees: {total_employees}
 
 Attendance Summary:
   Present: {presents}
@@ -1089,7 +1091,7 @@ Complaints:
     MonthlyCompanyReport.objects.create(
         month=month,
         year=year,
-        file_path=db_path
+        report_file=db_path
     )
 
     return JsonResponse({
