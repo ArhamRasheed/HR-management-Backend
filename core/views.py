@@ -434,7 +434,15 @@ def dashboard_view(request):
         start_of_month = today.replace(day=1)
 
         new_hires = Employee.objects.filter(joining_date__gte=start_of_month, joining_date__lte=today).count()
+        
+        first_day_this_month = start_of_month
+        last_day_prev_month = first_day_this_month - timedelta(days=1)
+        first_day_prev_month = last_day_prev_month.replace(day=1)
 
+        prev_hires = Employee.objects.filter(
+            joining_date__gte=first_day_prev_month,
+            joining_date__lte=last_day_prev_month
+        ).count()
         total_departments = Department.objects.count()
 
         employees_per_department = Employee.objects.values('department__department_name').annotate(
@@ -458,11 +466,11 @@ def dashboard_view(request):
             "absence_ratio": absence_ratio,
             "unresolved_complaints": unresolved_complaints,
             "total_insurances": total_insurances,
-            "new_hires_this_month": new_hires,
             "total_departments": total_departments,
             "employees_per_department": dept_emp_list,
             "pending_leaves": pending_leaves,
             "total_payroll": float(total_payroll),
+            "increase_in_hires": float(new_hires / (new_hires + prev_hires))
         }, status=200)
     except Exception as e:
         return JsonResponse ({'message': f"{e}"})
