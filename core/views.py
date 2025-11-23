@@ -1173,9 +1173,7 @@ def delete_leave(request, leave_type_name):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def insured_employees_view(request):
-    insurances = InsurancePlan.objects.all().prefetch_related(
-        'employee_insurances__employee'
-    )
+    insurances = EmployeeInsurance.objects.select_related('employee', 'insurance_plan').filter(employee__employment_status="active")
 
     result = []
 
@@ -1191,7 +1189,7 @@ def insured_employees_view(request):
                 "end_date": ei.end_date,
                 "monthly_deduction": ei.monthly_deduction,
             }
-            for ei in insurance.employee_insurances.all()
+            for ei in insurances
         ]
 
         result.append({
