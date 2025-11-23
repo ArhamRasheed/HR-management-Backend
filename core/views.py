@@ -815,9 +815,6 @@ def generate_payroll_view(request):
 
         return JsonResponse({'status': 'success', 'payrolls': payrolls_data})
     except Exception as e:
-        print("\n\n---- PAYROLL ERROR ----\n")
-        print(str(e))
-        print(traceback.format_exc())
         return JsonResponse({'error': str(e)}, status=500)
 
     
@@ -825,15 +822,17 @@ def payroll_history_view(request):
     payrolls = Payroll.objects.all()
     payroll_data = [
         {
-            "employee" : p.employee.full_name,
-            "net salary" : p.net_salary,
-            "month" : p.month,
+            "employee": p.employee.full_name,
+            "net_salary": str(p.net_salary),
+            "month": p.month,
             "year": p.year,
             "status": p.status
         }
         for p in payrolls
     ]
-    return JsonResponse ({"Payrolls" : payroll_data})
+
+    return JsonResponse({"payrolls": payroll_data}, safe=False)
+
 
 
 # @api_view(['POST'])

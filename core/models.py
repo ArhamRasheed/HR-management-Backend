@@ -170,8 +170,7 @@ class Complaint(models.Model):
 class Payroll(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('processed', 'Processed'),
-        ('paid', 'Paid'),
+        ('paid', 'Paid')
     ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payrolls')
