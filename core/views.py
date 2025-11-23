@@ -1620,7 +1620,6 @@ def apply_leaves(request, employee_id):
     start_date = data.get("start_date")       # YYYY-MM-DD
     end_date = data.get("end_date")           # YYYY-MM-DD
     leave_type = data.get("leave_type")       # sick, casual, annual, etc.
-    is_paid = data.get("is_paid", False)
 
     
     if not start_date or not end_date or not leave_type:
