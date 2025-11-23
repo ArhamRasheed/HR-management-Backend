@@ -1137,7 +1137,7 @@ def add_leave_view(request):
         return JsonResponse({'message': 'Leave type already exists.'}, status=400)
     LeaveType.objects.create(
         leave_type_name=leave_type_name,
-        description=description,
+        policy_description=description,
         max_days_per_year=max_days_per_year,
         is_paid=is_paid
     )
