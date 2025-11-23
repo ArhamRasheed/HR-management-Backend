@@ -819,19 +819,21 @@ def generate_payroll_view(request):
 
     
 def payroll_history_view(request):
-    payrolls = Payroll.objects.all()
-    payroll_data = [
-        {
-            "employee": p.employee.full_name,
-            "net_salary": str(p.net_salary),
+    payrolls = Payroll.objects.select_related('employee').all()
+    payroll_data = []
+
+    for p in payrolls:
+        employee = p.employee if hasattr(p, "employee") else None
+
+        payroll_data.append({
+            "employee": employee.full_name if employee else "Employee Deleted",
+            "net_salary": p.net_salary,
             "month": p.month,
             "year": p.year,
-            "status": p.status
-        }
-        for p in payrolls
-    ]
+            "status": p.status,
+        })
 
-    return JsonResponse({"payrolls": payroll_data}, safe=False)
+    return JsonResponse({"Payrolls": payroll_data})
 
 
 
