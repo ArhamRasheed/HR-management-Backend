@@ -1339,8 +1339,7 @@ def update_insurance(request, insurance_id):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def employee_leave(request):
-    leave_applications = LeaveApplication.objects.select_related('employee', 'leave_type').all()
-
+    leave_applications = LeaveApplication.objects.select_related('employee', 'leave_type').filter(employee__employmnent_satatus="active")
     result = [
         {
             'id': la.id,
