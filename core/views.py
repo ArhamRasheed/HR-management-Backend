@@ -470,7 +470,7 @@ def dashboard_view(request):
             "employees_per_department": dept_emp_list,
             "pending_leaves": pending_leaves,
             "total_payroll": float(total_payroll),
-            "increase_in_hires": float(new_hires / (new_hires + prev_hires))
+            "increase_in_hires_percentage": float(new_hires / (new_hires + prev_hires)) * 100
         }, status=200)
     except Exception as e:
         return JsonResponse ({'message': f"{e}"})
