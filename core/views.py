@@ -923,7 +923,8 @@ def generate_employee_reports(month, year):
             results.append({
                 "employee_id": emp.id,
                 "file_path": exists.file_path,
-                "status": "already_exists"
+                "status": "already_exists",
+                "generated_on": datetime.now().replace(second=0, microsecond=0)
             })
             continue
 
