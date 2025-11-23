@@ -70,5 +70,7 @@ urlpatterns = [
     path('add_candidate/', views.add_interviewed, name='add_interviewed'), #working
     path('update_candidate/', views.shortlist_or_reject, name='update_candidates'), #working
     
-    path('allowed-roles/', views.allowed_roles, name='allowed_roles') #working
+    path('allowed-roles/', views.allowed_roles, name='allowed_roles'), #working
+    
+    path('download/', views.download_report_view, name="download")
 ]

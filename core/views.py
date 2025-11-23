@@ -18,6 +18,7 @@ from django.contrib.auth.hashers import make_password
 from django.db.models import Count, Sum
 import random
 import traceback
+from django.http import FileResponse, Http404
 
 
 allowed_positions_for_departments = {
@@ -1886,3 +1887,19 @@ def allowed_roles(request):
             'message': "department id is needed"
         }, status=400
     )
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@hr_required
+def download_report_view(request):
+    file_path = request.GET.get("file_path")  # full or relative media path
+
+    if not file_path:
+        return JsonResponse({"error": "file_path is required"}, status=400)
+
+    full_path = os.path.join(settings.MEDIA_ROOT, file_path)
+
+    if not os.path.exists(full_path):
+        raise Http404("File not found")
+
+    return FileResponse(open(full_path, "rb"), as_attachment=True)
