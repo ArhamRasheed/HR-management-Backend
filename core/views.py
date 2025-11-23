@@ -922,7 +922,7 @@ def generate_employee_reports(month, year):
         if exists:
             results.append({
                 "employee_id": emp.id,
-                "file_path": exists.file_path,
+                "file_path": exists.report_file,
                 "status": "already_exists",
                 "generated_on": datetime.now().replace(second=0, microsecond=0)
             })
@@ -997,13 +997,13 @@ Payroll for {month}, {year}: {payroll_status}
             employee=emp,
             month=month,
             year=year,
-            report_file=db_path,
+            report_file=file_path,
             generated_at=datetime.now().replace(second=0, microsecond=0)
         )
 
         results.append({
             "employee_id": emp.id,
-            "file_path": db_path,
+            "file_path": file_path,
             "status": "created",
             "generated_on": datetime.now().replace(second=0, microsecond=0)
         })
@@ -1095,13 +1095,13 @@ Complaints:
     MonthlyCompanyReport.objects.create(
         month=month,
         year=year,
-        report_file=db_path,
+        report_file=file_path,
         
     )
 
     return JsonResponse({
         "status": "created",
-        "file_path": db_path,
+        "file_path": file_path,
         "generated_on": datetime.now().replace(second=0, microsecond=0)
     })
 
