@@ -173,7 +173,7 @@ class Payroll(models.Model):
         ('paid', 'Paid')
     ]
 
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payrolls')
+    employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, related_name='payrolls')
     month = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
     year = models.IntegerField()
     bonuses = models.DecimalField(max_digits=15, decimal_places=2, default=0)
