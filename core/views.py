@@ -394,7 +394,7 @@ def login_view(request):
         }, status=500)
     
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def logout_view(request):
     try:
